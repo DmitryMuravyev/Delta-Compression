@@ -60,7 +60,7 @@ Compression settings are configured at the bottom of the window:
 After clicking on the "Compress" button and selecting the path to save the file, data analysis is performed first (blue progress bar), and then compression and writing the array to the output file (green progress bar).  
 ${\color{red}Attention!}$ The file name will be used as the base for macro names and constant names in the generated file.
 
-In case you don't have .NET 8 installed, I have prepared [self-contained application versions](https://drive.google.com/drive/folders/18RQaH1zRoYLzu4I6Uneg_3HMOnUn0RrV) for x86 and x64.
+***In case you don't have .NET 8 installed, I have prepared [self-contained application versions](https://drive.google.com/drive/folders/18RQaH1zRoYLzu4I6Uneg_3HMOnUn0RrV) for x86 and x64.***
 
 In the near future, I will release a video on [my YouTube channel](https://youtube.com/@DmitryMuravyev), in which I will show the sequence of actions more clearly.
 
@@ -70,7 +70,7 @@ For correct decompression, you only need to configure a few parameters in the fi
 
 - Using commenting characters '//', select one of the delta calculating options and, for example, choosing the DECOMPRESSION_FIXED_WINDOW_FIRST option you can decompress data compressed not only by this method (Fixed + Adaptive), but also a data, compressed by Fixed Window only. Likewise using DECOMPRESSION_ADAPTIVE_FLOATING_WINDOW_FIRST, you can decompress data, compressed both by Adaptive + Fixed and only by Adaptive Window methods:
 
-```
+```C
 //#define DECOMPRESSION_FIXED_WINDOW_ONLY
 //#define DECOMPRESSION_ADAPTIVE_FLOATING_WINDOW_ONLY
 #define DECOMPRESSION_FIXED_WINDOW_FIRST
@@ -78,19 +78,19 @@ For correct decompression, you only need to configure a few parameters in the fi
 ```
 - Set the maximum number of channels (e.g. R/G/B = 3 channels) that will be decompressed in your code:
 
-```
+```C
 #define DECOMPRESSION_MAX_NUMBER_OF_CHANNELS	3
 ```
 
 - Define whether decompression of images divided into squares will be used:
 
-```
+```C
 #define DECOMPRESSION_USE_SQUARES
 ```
 
 - And for the AVR platform, define whether data chunking will be used and set the size of chunks (for data arrays exceeding 32767 bytes):
 
-```
+```C
 #define USE_FAR_MEMORY_CHUNKS  
 #define CHUNK_SIZE	16384
 ```
@@ -159,7 +159,7 @@ I have made several modifications to the decompression code that differ in capab
 \* Relevant only for the AVR platform.  
 ** To do this, a pointer to an array of far pointers should be passed to the decompression procedure instead of a direct pointer to a data array:
 
-```
+```C
 static uint_farptr_t dataChunks[n];
 decompressNextFrames(dc, dataChunks, decompressedData, framesCount);
 ```
