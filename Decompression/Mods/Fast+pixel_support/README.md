@@ -1,14 +1,19 @@
-High-speed adaptation:
+High-speed with pixel support:
 - focusing on the low-bit-length operations,
 - supported image size is up to 255x255px,
 - up to 8 bits per data channel,
 - up to 16 bits per frame,
-- decompression of 1-2-4 bits frames,
+- colorizing pixels during decompression (if used),
+- direct use of the RGB565 pixel buffer (if needed),
 - AVR "far" memory access support*,
 - splitting compressed data into memory chunks (up to 32767 bytes)**,
-- high performance.
+- high performance+.
 
-   Example: [ATMega2560 + ILI9486 480x320 display](/Examples/AVR/Arduino_boards/Mega2560_ILI9486_Fast).
+  Examples:  
+  [Arduino Nano + ST7789 240x240 display](/Examples/AVR/Arduino_boards/Nano_ST7789),  
+  [ESP32 DEVKIT board + ST7789 240x240 display](/Examples/ESP32/Wroom_ST7789),  
+  [STM32F070CB chip + ST7789 240x240 display](/Examples/STM32/F070CB_ST7789_DMA),  
+  [DevEBox board by mcudev + NT35510 800x480 display](/Examples/STM32/F407ZGT6_NT35510_FSMC_DMA).  
 
 
 \* Relevant only for the AVR platform.  
