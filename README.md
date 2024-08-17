@@ -60,8 +60,6 @@ Compression settings are configured at the bottom of the window:
 After clicking on the "Compress" button and selecting the path to save the file, data analysis is performed first (blue progress bar), and then compression and writing the array to the output file (green progress bar).  
 ${\color{red}Attention!}$ The file name will be used as the base for macro names and constant names in the generated file.
 
-***In case you don't have .NET 8 installed, I have published [self-contained application versions](https://drive.google.com/drive/folders/18RQaH1zRoYLzu4I6Uneg_3HMOnUn0RrV) for x86 and x64.***
-
 In the near future, I will release a video on [my YouTube channel](https://youtube.com/@DmitryMuravyev), in which I will show the sequence of actions more clearly.
 
 <h2>Decompression</h2>
@@ -163,6 +161,10 @@ I have made several modifications to the decompression code that differ in capab
 static uint_farptr_t dataChunks[n];
 decompressNextFrames(dc, dataChunks, decompressedData, framesCount);
 ```
+
+<h1>Download</h1>
+
+***In case you don't have .NET 8 installed, I have published [self-contained application versions](https://drive.google.com/drive/folders/18RQaH1zRoYLzu4I6Uneg_3HMOnUn0RrV) for x86 and x64.***
 
 <h1>Links</h1>
 
