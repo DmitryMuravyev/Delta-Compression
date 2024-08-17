@@ -1,0 +1,143 @@
+﻿<Window x:Class="DeltaComp.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:local="clr-namespace:DeltaComp"
+        mc:Ignorable="d"
+        Title="DeltaComp" Height="470" Width="822" MinWidth="822" MinHeight="470">
+    <Grid>
+        <TabControl Name="DataSourceTabControl" Margin="0,0,0,70" SelectionChanged="DataSourceTabControl_SelectionChanged">
+            <TabItem Name="Image" Header="Image">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="200"/>
+                        <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
+
+                    <Button Name="ImageOpenButton" Grid.Column="0" Content="Open" HorizontalAlignment="Left" Margin="10,10,0,0" VerticalAlignment="Top" Width="100" Click="ImageOpenButton_Click"/>
+                    <Label Grid.Column="0" Name="ImageOriginalSizeLabel" Content="0.00KB" HorizontalContentAlignment="Right" HorizontalAlignment="Right" Margin="0,17,10,0" VerticalAlignment="Top" Width="150" FontWeight="Bold"/>
+                    <Canvas Grid.Column="0" Name="ImageSourceCanvas" Margin="10,43,10,10">
+                        <Rectangle Width="{Binding Path=ActualWidth, ElementName=ImageSourceCanvas}" Height="{Binding Path=ActualHeight, ElementName=ImageSourceCanvas}" HorizontalAlignment="Center" VerticalAlignment="Center">
+                            <Rectangle.Fill>
+                                <DrawingBrush TileMode="Tile" Viewport="0,0,32,32" ViewportUnits="Absolute">
+                                    <DrawingBrush.Drawing>
+                                        <GeometryDrawing Geometry="M0,0 H1 V1 H2 V2 H1 V1 H0Z" Brush="LightGray"/>
+                                    </DrawingBrush.Drawing>
+                                </DrawingBrush>
+                            </Rectangle.Fill>
+                        </Rectangle>
+                        <Image Name="ImageSourceViewer" Width="{Binding Path=ActualWidth, ElementName=ImageSourceCanvas}" Height="{Binding Path=ActualHeight, ElementName=ImageSourceCanvas}" Margin="0,0,0,0" Stretch="Uniform"/>
+                    </Canvas>
+
+                    <CheckBox Grid.Column="1" Name="ImageConvertToGrayscaleCheckBox" Content="Convert to Grayscale" HorizontalAlignment="Left" Margin="10,43,0,0" VerticalAlignment="Top" IsEnabled="False" Checked="ImageChannelParametersChanged" Unchecked="ImageChannelParametersChanged"/>
+                    <CheckBox Grid.Column="1" Name="ImageUseAlphaCheckBox" Content="Use Alpha" HorizontalAlignment="Left" Margin="10,63,0,0" VerticalAlignment="Top" IsEnabled="False" Checked="ImageChannelParametersChanged" Unchecked="ImageChannelParametersChanged"/>
+                    <DataGrid Grid.Column="1" Name="ImageChannelsDataGrid" Margin="0,83,0,0" AutoGenerateColumns="False" CanUserSortColumns="False" CanUserResizeRows="False" CanUserAddRows="False" SelectionMode="Single" HeadersVisibility="Column" HorizontalContentAlignment="Stretch" VerticalContentAlignment="Stretch" HorizontalAlignment="Center" VerticalAlignment="Top" Height="151" Width="200" SelectionChanged="ImageChannelsDataGrid_SelectionChanged">
+                        <DataGrid.Resources>
+                            <SolidColorBrush x:Key="{x:Static SystemColors.InactiveSelectionHighlightBrushKey}" Color="DarkGray"/>
+                        </DataGrid.Resources>
+                        <DataGrid.Columns>
+                            <DataGridTextColumn Header="Channel" Binding="{Binding Name}" Width="0.5*" IsReadOnly="True" CanUserResize="False" CanUserSort="False"/>
+                            <DataGridTemplateColumn Header="Bits" Width="0.5*" CanUserResize="False" CanUserSort="False">
+                                <DataGridTemplateColumn.CellTemplate>
+                                    <DataTemplate>
+                                        <ComboBox Name="ImageChannelBitDepthComboBox" ItemsSource="{Binding BitDepthList}" SelectedValue="{Binding TargetBitDepth, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" HorizontalAlignment="Stretch" VerticalAlignment="Center" SelectionChanged="ImageChannelBitDepthComboBox_SelectionChanged" />
+                                    </DataTemplate>
+                                </DataGridTemplateColumn.CellTemplate>
+                            </DataGridTemplateColumn>
+                        </DataGrid.Columns>
+                    </DataGrid>
+                    <Button Name="ImageBitDepthMinusButton" Grid.Column="1" HorizontalAlignment="Left" Margin="0,239,0,0" VerticalAlignment="Top" Height="32" Width="32" IsEnabled="False" Click="ImageAllChannelsChangeBitDepthButton_Click">
+                        <Path Fill="{Binding ElementName=ImageBitDepthMinusButton, Path=IsEnabled, Converter={StaticResource EnabledToColorConverter}}" Data="M 0 0 L 0 4 L 16 4 L 16 0 Z" SnapsToDevicePixels="True"/>
+                    </Button>
+                    <Button Name="ImageBitDepthPlusButton" Grid.Column="1" HorizontalAlignment="Left" Margin="37,239,0,0" VerticalAlignment="Top" Height="32" Width="32" IsEnabled="False" Click="ImageAllChannelsChangeBitDepthButton_Click">
+                        <Path Fill="{Binding ElementName=ImageBitDepthPlusButton, Path=IsEnabled, Converter={StaticResource EnabledToColorConverter}}" Data="M 0 6 L 0 10 L 6 10 L 6 16 L 10 16 L 10 10 L 16 10 L 16 6 L 10 6 L 10 0 L 6 0 L 6 6 Z" SnapsToDevicePixels="True"/>
+                    </Button>
+                    <Button Name="ImageChannelDownButton" Grid.Column="1" HorizontalAlignment="Right" Margin="0,239,37,0" VerticalAlignment="Top" Height="32" Width="32" IsEnabled="False" Click="ImageChannelMoveButton_Click">
+                        <Path Fill="{Binding ElementName=ImageChannelDownButton, Path=IsEnabled, Converter={StaticResource EnabledToColorConverter}}" Data="M 0 0 L 8 8 L 16 0 Z" SnapsToDevicePixels="True"/>
+                    </Button>
+                    <Button Name="ImageChannelUpButton" Grid.Column="1" HorizontalAlignment="Left" Margin="168,239,0,0" VerticalAlignment="Top" Height="32" Width="32" IsEnabled="False" Click="ImageChannelMoveButton_Click">
+                        <Path Fill="{Binding ElementName=ImageChannelUpButton, Path=IsEnabled, Converter={StaticResource EnabledToColorConverter}}" Data="M 0 8 L 16 8 L 8 0 Z" SnapsToDevicePixels="True"/>
+                    </Button>
+                    <Label Grid.Column="1" Content="Split into squares with side:" HorizontalAlignment="Left" Margin="10,0,0,28" VerticalAlignment="Bottom"/>
+                    <ComboBox Name="ImageSplitIntoSquaresComboBox" Grid.Column="1" DisplayMemberPath="Name" Margin="10,0,10,10" VerticalAlignment="Bottom" Width="180" SelectedIndex="0" IsEnabled="False"/>
+
+                    <Button Name="ImageUpdatePreviewButton" Grid.Column="2" Content="Update Preview" HorizontalAlignment="Right" Margin="0,10,10,0" VerticalAlignment="Top" Width="109" Click="ImageUpdatePreviewButton_Click" IsEnabled="False"/>
+                    <Label Grid.Column="2" Name="ImageSourceSizeLabel" Content="0.00KB" HorizontalAlignment="Left" Margin="10,17,0,0" VerticalAlignment="Top" Width="150" FontWeight="Bold"/>
+                    <Canvas Grid.Column="2" Name="ImagePreviewCanvas" Margin="10,43,10,10" >
+                        <Rectangle Width="{Binding Path=ActualWidth, ElementName=ImagePreviewCanvas}" Height="{Binding Path=ActualHeight, ElementName=ImagePreviewCanvas}" HorizontalAlignment="Center" VerticalAlignment="Center">
+                            <Rectangle.Fill>
+                                <DrawingBrush TileMode="Tile" Viewport="0,0,32,32" ViewportUnits="Absolute">
+                                    <DrawingBrush.Drawing>
+                                        <GeometryDrawing Geometry="M0,0 H1 V1 H2 V2 H1 V1 H0Z" Brush="LightGray"/>
+                                    </DrawingBrush.Drawing>
+                                </DrawingBrush>
+                            </Rectangle.Fill>
+                        </Rectangle>
+                        <Image Name="ImageDestinationViewer" Width="{Binding Path=ActualWidth, ElementName=ImagePreviewCanvas}" Height="{Binding Path=ActualHeight, ElementName=ImagePreviewCanvas}" Margin="0,0,0,0" Stretch="Uniform"/>
+                    </Canvas>
+                </Grid>
+            </TabItem>
+            <!--
+            <TabItem Name="Audio" Header="Audio" IsEnabled="False">
+                <Grid />
+            </TabItem>
+            -->
+            <TabItem Name="CustomData" Header="Custom Data">
+                <Grid>
+                    <Button Name="FileOpenButton" Content="Open" HorizontalAlignment="Left" Margin="10,10,0,0" VerticalAlignment="Top" Width="100" Click="FileOpenButton_Click"/>
+                    <Label Name="FileNameLabel" Content="-" Margin="126,3,124,0" VerticalAlignment="Top" FontSize="16" FontWeight="Bold"/>
+                    <Button Name="FileUpdatePreviewButton" Grid.Column="2" Content="Update Preview" HorizontalAlignment="Right" Margin="0,10,10,0" VerticalAlignment="Top" Width="109" Click="FileUpdatePreviewButton_Click" IsEnabled="False"/>
+                    <Label Content="Channels count:" HorizontalAlignment="Left" Margin="10,39,0,0" VerticalAlignment="Top"/>
+                    <ComboBox Name="FileChannelsCountComboBox" HorizontalAlignment="Left" Margin="10,62,0,0" VerticalAlignment="Top" Width="100" IsEnabled="False" SelectedIndex="0" SelectionChanged="FileChannelsCountComboBox_SelectionChanged">
+                        <ComboBoxItem Content="1"/>
+                        <ComboBoxItem Content="2"/>
+                        <ComboBoxItem Content="3"/>
+                        <ComboBoxItem Content="4"/>
+                    </ComboBox>
+                    <Label Content="Bits per channel:" HorizontalAlignment="Left" Margin="10,89,0,0" VerticalAlignment="Top"/>
+                    <ComboBox Name="FileBitsPerChannelComboBox" HorizontalAlignment="Left" Margin="10,112,0,0" VerticalAlignment="Top" Width="100" IsEnabled="False" SelectedIndex="0" SelectionChanged="FileBitsPerChannelComboBox_SelectionChanged">
+                        <ComboBoxItem Content="8"/>
+                        <ComboBoxItem Content="16"/>
+                        <ComboBoxItem Content="24"/>
+                        <ComboBoxItem Content="32"/>
+                    </ComboBox>
+                    <RadioButton Name="FileBigEndianRadioButton" Content="Big endian" GroupName="Endianness" HorizontalAlignment="Left" Margin="10,148,0,0" VerticalAlignment="Top" IsChecked="True" IsEnabled="False" Checked="FileEndiannessRadioButton_StateChanged" Unchecked="FileEndiannessRadioButton_StateChanged"/>
+                    <RadioButton Name="FileLittleEndianRadioButton" Content="Little endian" GroupName="Endianness" HorizontalAlignment="Left" Margin="10,163,0,0" VerticalAlignment="Top" IsEnabled="{Binding Path=IsEnabled, ElementName=FileBigEndianRadioButton}"/>
+                    <Label Name="FileOriginalSizeLabel" Content="0.00KB" HorizontalAlignment="Left" HorizontalContentAlignment="Center" Margin="10,0,0,0" VerticalAlignment="Bottom" FontSize="20" FontWeight="Bold" Width="100"/>
+                    <TextBox Name="FilePreviewTextBox" Margin="126,39,10,10" TextWrapping="Wrap" Text="" FontFamily="Courier New"/>
+                </Grid>
+            </TabItem>
+        </TabControl>
+        <Grid VerticalAlignment="Bottom" Height="70" Margin="0,336,0,0">
+            <Label Content="Block size (bits):" HorizontalAlignment="Left" Margin="10,0,0,0" VerticalAlignment="Top"/>
+            <ComboBox Name="BlockSizeBitsComboBox" ItemsSource="{Binding Source={StaticResource BlockSizeBits}}" HorizontalAlignment="Left" Margin="10,0,0,26" VerticalAlignment="Bottom" Width="100" SelectedIndex="6"/>
+
+            <Label Content="Delta option:" HorizontalAlignment="Left" Margin="130,0,0,0" VerticalAlignment="Top"/>
+            <ComboBox Name="DeltaOptionComboBox" HorizontalAlignment="Left" Margin="130,0,0,26" VerticalAlignment="Bottom" Width="200" SelectedIndex="2">
+                <ComboBoxItem Content="Fixed Window only"/>
+                <ComboBoxItem Content="Adaptive Floating Window only"/>
+                <ComboBoxItem Content="Both options, Fixed first"/>
+                <ComboBoxItem Content="Both options, Adaptive first"/>
+            </ComboBox>
+
+            <Label Content="Block search:" HorizontalAlignment="Left" Margin="350,0,0,0" VerticalAlignment="Top"/>
+            <ComboBox Name="BlockSearchOptionComboBox" HorizontalAlignment="Left" Margin="350,0,0,26" VerticalAlignment="Bottom" Width="100" SelectedIndex="0">
+                <ComboBoxItem Content="Fast"/>
+                <ComboBoxItem Content="Brute force"/>
+            </ComboBox>
+
+            <Label Content=".h platform:" HorizontalAlignment="Left" Margin="470,0,0,0" VerticalAlignment="Top"/>
+            <ComboBox Name="TargetPlatformComboBox" HorizontalAlignment="Left" Margin="470,0,0,26" VerticalAlignment="Bottom" Width="100" SelectedIndex="0" />
+
+            <Button Name="CompressButton" Content="Compress" HorizontalAlignment="Right" Margin="0,0,10,17" VerticalAlignment="Bottom" Width="80" Height="47" IsEnabled="False" Click="CompressButton_Click"/>
+
+            <ProgressBar Name="CompressionProgress" Height="10" Margin="0,0,0,0" VerticalAlignment="Bottom"/>
+            <Label Content="Efficiency:" HorizontalAlignment="Right" Margin="0,0,129,0" VerticalAlignment="Top"/>
+            <Label Name="CompressionEfficiencyLabel" Content="0.0%" Margin="0,0,100,16" VerticalAlignment="Bottom" HorizontalContentAlignment="Center" FontSize="26" FontWeight="Bold" HorizontalAlignment="Right" Width="120"/>
+            <Label Name="CompressedSizeLabel" Content="0.00KB" Margin="0,0,100,8" VerticalAlignment="Bottom" HorizontalContentAlignment="Center" FontSize="10" FontWeight="Bold" HorizontalAlignment="Right" Width="120"/>
+
+        </Grid>
+    </Grid>
+</Window>
