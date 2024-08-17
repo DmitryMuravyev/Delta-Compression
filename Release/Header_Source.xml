@@ -1,0 +1,54 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<header>
+
+  <includes>
+    <include string="&quot;Decompression.h&quot;" platform="all"/>
+  </includes>
+
+  <defines>
+    <define string="NUMBER_OF_FRAMES" shortcut="nof" platform="all"/>
+    <define string="NUMBER_OF_CHANNELS" shortcut="noc" platform="all"/>
+    <define string="BITS_PER_CHANNELS" shortcut="bpc" platform="all"/>
+    <define string="BLOCK_SIZE_BITS" shortcut="bsb" platform="all"/>
+    <define string="BITS_PER_METHOD_DECLARATION" shortcut="bpmd" platform="all"/>
+    <define string="BITS_PER_FRAME" shortcut="bpf" platform="all"/>
+    <define string="DELTA_OPTION" shortcut="do" commentShortcut="dos" platform="all"/>
+    <define string="IMAGE_WIDTH" shortcut="iw" platform="all"/>
+    <define string="IMAGE_HEIGHT" shortcut="ih" platform="all"/>
+    <define string="SPLIT_TO_SQUARES" shortcut="sts" platform="all"/>
+    <define string="SQUARE_SIDE" shortcut="ss" platform="all"/>
+    <define string="SQUARES_PER_WIDTH" platform="all">
+      <operand>IMAGE_WIDTH</operand>
+      <operator> / </operator>
+      <operand>SQUARE_SIDE</operand>
+    </define>
+    <define string="SQUARES_PER_WIDTH_SIZE" platform="all">
+      <operand>IMAGE_WIDTH</operand>
+      <operator> * </operator>
+      <operand>SQUARE_SIDE</operand>
+    </define>
+  </defines>
+
+  <constants>
+    <constant string="DC" type="DecompressionContext" platform="all">
+      <initialValue>NUMBER_OF_CHANNELS</initialValue>
+      <initialValue>BITS_PER_CHANNELS</initialValue>
+      <initialValue>BLOCK_SIZE_BITS</initialValue>
+      <initialValue>BITS_PER_METHOD_DECLARATION</initialValue>
+      <initialValue>BITS_PER_FRAME</initialValue>
+      <directive string="DECOMPRESSION_USE_SQUARES" defined="1">
+        <initialValue>SPLIT_TO_SQUARES</initialValue>
+        <initialValue>IMAGE_WIDTH</initialValue>
+        <initialValue>SQUARE_SIDE</initialValue>
+        <initialValue>SQUARES_PER_WIDTH</initialValue>
+        <initialValue>SQUARES_PER_WIDTH_SIZE</initialValue>
+      </directive>
+    </constant>
+  </constants>
+
+  <data string="Data" type="uint8_t" progmem="1" platform="avr" chunkSize="16384" />
+  <data string="Data" type="uint8_t" progmem="0" platform="esp32" />
+  <data string="Data" type="uint8_t" progmem="0" platform="stm32" />
+  <data string="Data" type="uint8_t" progmem="0" platform="all" />
+
+</header>
