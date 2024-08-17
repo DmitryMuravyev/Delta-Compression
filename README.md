@@ -1,3 +1,5 @@
+![Mini-poster](https://github.com/user-attachments/assets/1be914a8-f612-4b55-a046-98ea5684088d)
+
 <h1>What is it and what is it for</h1>
 
 It is a simple and lightweight compressor/decompressor based on the delta encoding method. I planned it as a small auxiliary module for my MCU projects to output graphics to the display, but I got a little carried away and the project turned out to be quite extensive. Nevertheless, its main purpose is to reduce the size of graphical interface elements with their further decompression/displaying on the screen. This technology can be useful in embedded small and medium-level systems (among the examples I made [one for ATtiny85](/Examples/AVR/ATtiny85)).
