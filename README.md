@@ -45,7 +45,7 @@ Sprint 3 - https://www.patreon.com/posts/delta-encoding-3-108236064
 <h1>How to use it</h1>
 <h2>Compression</h2>
 
-![Application](https://github.com/user-attachments/assets/d1b4f65b-9c3f-4e51-9042-493cea41009c)
+![Application](https://github.com/user-attachments/assets/88e63850-9be2-4132-8754-f7246748f318)
 
 The compression application contains 2 tabs: for images and for any other files. After opening an image or file, you can set up the desired channel configuration, and select the ***Split into squares*** mode for images.
 In the preview area, you can see how the image (or data divided into channels) will look for the selected configuration.
@@ -68,23 +68,30 @@ For correct decompression, you only need to configure a few parameters in the fi
 
 - Using commenting characters '//', select one of the delta calculating options and, for example, choosing the DECOMPRESSION_FIXED_WINDOW_FIRST option you can decompress data compressed not only by this method (Fixed + Adaptive), but also a data, compressed by Fixed Window only. Likewise using DECOMPRESSION_ADAPTIVE_FLOATING_WINDOW_FIRST, you can decompress data, compressed both by Adaptive + Fixed and only by Adaptive Window methods:
 
-`//#define DECOMPRESSION_FIXED_WINDOW_ONLY  
-  //#define DECOMPRESSION_ADAPTIVE_FLOATING_WINDOW_ONLY  
-  #define DECOMPRESSION_FIXED_WINDOW_FIRST  
-  //#define DECOMPRESSION_ADAPTIVE_FLOATING_WINDOW_FIRST`
-
+```
+//#define DECOMPRESSION_FIXED_WINDOW_ONLY
+//#define DECOMPRESSION_ADAPTIVE_FLOATING_WINDOW_ONLY
+#define DECOMPRESSION_FIXED_WINDOW_FIRST
+//#define DECOMPRESSION_ADAPTIVE_FLOATING_WINDOW_FIRST
+```
 - Set the maximum number of channels (e.g. R/G/B = 3 channels) that will be decompressed in your code:
 
-`#define DECOMPRESSION_MAX_NUMBER_OF_CHANNELS	3`
+```
+#define DECOMPRESSION_MAX_NUMBER_OF_CHANNELS	3
+```
 
 - Define whether decompression of images divided into squares will be used:
 
-`#define DECOMPRESSION_USE_SQUARES`
+```
+#define DECOMPRESSION_USE_SQUARES
+```
 
 - And for the AVR platform, define whether data chunking will be used and set the size of chunks (for data arrays exceeding 32767 bytes):
 
-`#define USE_FAR_MEMORY_CHUNKS  
-  #define CHUNK_SIZE	16384`
+```
+#define USE_FAR_MEMORY_CHUNKS  
+#define CHUNK_SIZE	16384
+```
 
 You can find [application examples for different tasks and platforms here](/Examples).
 
@@ -147,13 +154,17 @@ I have made several modifications to the decompression code that differ in capab
   [Arduino Nano + ST7789 240x240 display](/Examples/AVR/Arduino_boards/Nano_ST7789_Tiny),  
   [ATtiny85 chip + SPI output](/Examples/AVR/ATtiny85).  
 
-\* Relevant only for the AVR platform.
+\* Relevant only for the AVR platform.  
 ** To do this, a pointer to an array of far pointers should be passed to the decompression procedure instead of a direct pointer to a data array:
 
-`    static uint_farptr_t dataChunks[n];  
-    decompressNextFrames(dc, dataChunks, decompressedData, framesCount);`
+```
+static uint_farptr_t dataChunks[n];
+decompressNextFrames(dc, dataChunks, decompressedData, framesCount);
+```
 
 <h1>Links</h1>
+
+Project files - https://drive.google.com/drive/folders/1WRB-s4aPv4rQhnDVdqntXX3w0xl3WAg_
 
 Data compression - https://en.wikipedia.org/wiki/Data_compression
 
@@ -163,7 +174,6 @@ Delta encoding - https://en.wikipedia.org/wiki/Delta_encoding
 
 List of monochrome and RGB color formats - https://en.wikipedia.org/wiki/List_of_monochrome_and_RGB_color_formats
 
-Source code and project files - https://drive.google.com/drive/folders/1WRB-s4aPv4rQhnDVdqntXX3w0xl3WAg_
-
 Girls - https://www.freepik.com/free-photo/woman-with-beautiful-body_9828277.htm
 https://www.pexels.com/photo/woman-wearing-black-top-1642161/
+https://www.freepik.com/free-photo/hispanic-woman-wearing-lingerie-smiling-doing-phone-gesture-with-hand-fingers-like-talking-telephone-communicating-concepts_53265959.htm
