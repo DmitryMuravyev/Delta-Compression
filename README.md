@@ -140,7 +140,7 @@ I have made several modifications to the decompression code that differ in capab
   [STM32F070CB chip + ST7789 240x240 display](/Examples/STM32/F070CB_ST7789_DMA),  
   [DevEBox board by mcudev + NT35510 800x480 display](/Examples/STM32/F407ZGT6_NT35510_FSMC_DMA).  
 
-4) Tiny adaptation (THIS ONE):
+4) Tiny adaptation:
 	- focusing on the 8-bit operations,
 	- supported image size is up to 255x255px,
 	- up to 8 bits per data channel,
