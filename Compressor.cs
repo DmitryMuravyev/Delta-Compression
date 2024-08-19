@@ -1110,8 +1110,7 @@ namespace DeltaComp
                     AddBitsToCompressedData(block.InitialValues[c], BitsPerChannel[c]);
 
                     bool afw = false;
-                    byte realMethod = GetRealMethod(methods[c], BitsPerChannel[c], ref afw);
-                    methods[c] = realMethod;
+                    methods[c] = GetRealMethod(methods[c], BitsPerChannel[c], ref afw);
 
                     if (afw)
                     {
