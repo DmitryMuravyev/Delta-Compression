@@ -1111,10 +1111,10 @@ namespace DeltaComp
 
                     bool afw = false;
                     byte realMethod = GetRealMethod(methods[c], BitsPerChannel[c], ref afw);
+                    methods[c] = realMethod;
 
                     if (afw)
                     {
-                        methods[c] = realMethod;
                         windows[c] = (UInt64)Math.Pow(2, methods[c]);
                         halfWindows[c] = (UInt32)(windows[c] >> 1);
                         lastValues[c] = block.InitialValues[c];
