@@ -150,12 +150,12 @@ I have made several modifications to the decompression code that differ in capab
 	- splitting compressed data into memory chunks (up to 32767 bytes)**;
 	- high performance+.
 
-  Source: [/Decompression/Mods/Fast+pixel_support](/Decompression/Mods/Fast+pixel_support)  
-  Examples:  
-  [Arduino Nano + ST7789 240x240 display](/Examples/AVR/Arduino_boards/Nano_ST7789),  
-  [ESP32 DEVKIT board + ST7789 240x240 display](/Examples/ESP32/Wroom_ST7789),  
-  [STM32F070CB chip + ST7789 240x240 display](/Examples/STM32/F070CB_ST7789_DMA),  
-  [DevEBox board by mcudev + NT35510 800x480 display](/Examples/STM32/F407ZGT6_NT35510_FSMC_DMA).  
+     Source: [/Decompression/Mods/Fast+pixel_support](/Decompression/Mods/Fast+pixel_support)  
+     Examples:  
+     [Arduino Nano + ST7789 240x240 display](/Examples/AVR/Arduino_boards/Nano_ST7789),  
+     [ESP32 DEVKIT board + ST7789 240x240 display](/Examples/ESP32/Wroom_ST7789),  
+     [STM32F070CB chip + ST7789 240x240 display](/Examples/STM32/F070CB_ST7789_DMA),  
+     [DevEBox board by mcudev + NT35510 800x480 display](/Examples/STM32/F407ZGT6_NT35510_FSMC_DMA).  
 
 4) Tiny adaptation:
 	- focusing on the 8-bit operations;
@@ -166,10 +166,10 @@ I have made several modifications to the decompression code that differ in capab
 	- direct use of the RGB565 pixel buffer (if needed);
 	- high performance++.
 
-  Source: [/Decompression/Mods/Tiny+pixel_support](/Decompression/Mods/Tiny+pixel_support)  
-  Examples:  
-  [Arduino Nano + ST7789 240x240 display](/Examples/AVR/Arduino_boards/Nano_ST7789_Tiny),  
-  [ATtiny85 chip + SPI output](/Examples/AVR/ATtiny85).  
+     Source: [/Decompression/Mods/Tiny+pixel_support](/Decompression/Mods/Tiny+pixel_support)  
+     Examples:  
+     [Arduino Nano + ST7789 240x240 display](/Examples/AVR/Arduino_boards/Nano_ST7789_Tiny),  
+     [ATtiny85 chip + SPI output](/Examples/AVR/ATtiny85).  
 
 \* Relevant only for the AVR platform.  
 ** To do this, a pointer to an array of far pointers should be passed to the decompression procedure instead of a direct pointer to a data array:
