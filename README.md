@@ -1,5 +1,7 @@
 ![Mini-poster](https://github.com/user-attachments/assets/1be914a8-f612-4b55-a046-98ea5684088d)
 
+[![Static Badge](https://img.shields.io/badge/%D0%A0%D1%83%D1%81%D1%81%D0%BA%D0%B8%D0%B9-8A2BE2)](README.ru.md)
+
 <h1>What is it and what is it for</h1>
 
 It is a simple and lightweight compressor/decompressor based on the delta encoding method. I planned it as a small auxiliary module for my MCU projects to output graphics to the display, but I got a little carried away and the project turned out to be quite extensive. Nevertheless, its main purpose is still to reduce the size of graphical interface elements with their further decompression/displaying on the screen. This technology can be useful in embedded small and medium-level systems (among the examples I made [one for ATtiny85](/Examples/AVR/ATtiny85)).
@@ -50,7 +52,8 @@ Sprint 3 - https://www.patreon.com/posts/delta-encoding-3-108236064
 ![Application](https://github.com/user-attachments/assets/88e63850-9be2-4132-8754-f7246748f318)
 
 The compression application contains 2 tabs: for images and for any other files. After opening an image or file, you can set up the desired channel configuration, and select the ***Split into squares*** mode for images.
-In the preview area, you can see how the image (or data divided into channels) will look for the selected configuration.
+In the preview area, you can see how the image (or data divided into channels) will look for the selected configuration.  
+
 Compression settings are configured at the bottom of the window:
 - The number of bits of the block length field. The larger this field, the longer blocks the compression algorithm will be able to make. This parameter is configured individually for each specific data instance and is usually in the range of 5-8 bits.
 - Delta calculation method. A Fixed Window is more suitable for low-contrast noise, and an Adaptive Floating Window is better for gradients (refer to the links above). Combinations of them are also available.
@@ -100,7 +103,7 @@ static Decompression decomp;
 decomp.bufferWidth = LOGO_IMAGE_WIDTH;
 ```
 
-And don't forget to reset the decompressor's environment variables before unpacking a new object.
+And don't forget to reset the decompressor's environment variables before unpacking a new object:
 
 ```C
 decomp.resetDecompression();
@@ -182,15 +185,15 @@ decompressNextFrames(dc, dataChunks, decompressedData, framesCount);
 
 <h1>Links</h1>
 
-Project files - https://drive.google.com/drive/folders/1WRB-s4aPv4rQhnDVdqntXX3w0xl3WAg_
+Project files - [https://drive.google.com/drive/folders/1WRB-s4aPv4rQhnDVdqntXX3w0xl3WAg_](https://drive.google.com/drive/folders/1WRB-s4aPv4rQhnDVdqntXX3w0xl3WAg_)
 
-Data compression - https://en.wikipedia.org/wiki/Data_compression
+Data compression - [https://en.wikipedia.org/wiki/Data_compression](https://en.wikipedia.org/wiki/Data_compression)
 
-Entropy coding - https://en.wikipedia.org/wiki/Entropy_coding
+Entropy coding - [https://en.wikipedia.org/wiki/Entropy_coding](https://en.wikipedia.org/wiki/Entropy_coding)
 
-Delta encoding - https://en.wikipedia.org/wiki/Delta_encoding
+Delta encoding - [https://en.wikipedia.org/wiki/Delta_encoding](https://en.wikipedia.org/wiki/Delta_encoding)
 
-List of monochrome and RGB color formats - https://en.wikipedia.org/wiki/List_of_monochrome_and_RGB_color_formats
+List of monochrome and RGB color formats - [https://en.wikipedia.org/wiki/List_of_monochrome_and_RGB_color_formats](https://en.wikipedia.org/wiki/List_of_monochrome_and_RGB_color_formats)
 
 Girls - https://www.freepik.com/free-photo/woman-with-beautiful-body_9828277.htm
 https://www.pexels.com/photo/woman-wearing-black-top-1642161/
