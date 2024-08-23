@@ -154,12 +154,12 @@ decomp.resetDecompression();
 	- разбиение сжатых данных на части (до 32767 байт)**;
 	- высокая производительность+.
 
-  Исходники: [/Decompression/Mods/Fast+pixel_support](/Decompression/Mods/Fast+pixel_support)  
-  Примеры:  
-  [Arduino Nano + дисплей ST7789 240x240](/Examples/AVR/Arduino_boards/Nano_ST7789),  
-  [Плата ESP32 DEVKIT + дисплей ST7789 240x240](/Examples/ESP32/Wroom_ST7789),  
-  [STM32F070CB (чип) + дисплей ST7789 240x240](/Examples/STM32/F070CB_ST7789_DMA),  
-  [Плата DevEBox от mcudev + дисплей NT35510 800x480](/Examples/STM32/F407ZGT6_NT35510_FSMC_DMA).  
+     Исходники: [/Decompression/Mods/Fast+pixel_support](/Decompression/Mods/Fast+pixel_support)  
+     Примеры:  
+     [Arduino Nano + дисплей ST7789 240x240](/Examples/AVR/Arduino_boards/Nano_ST7789),  
+     [Плата ESP32 DEVKIT + дисплей ST7789 240x240](/Examples/ESP32/Wroom_ST7789),  
+     [STM32F070CB (чип) + дисплей ST7789 240x240](/Examples/STM32/F070CB_ST7789_DMA),  
+     [Плата DevEBox от mcudev + дисплей NT35510 800x480](/Examples/STM32/F407ZGT6_NT35510_FSMC_DMA).  
 
 4) Миниатюрная адаптация:
 	- ориентация на 8-битную архитектуру;
@@ -170,10 +170,10 @@ decomp.resetDecompression();
 	- прямое использование пиксельного буфера RGB565 (если необходимо);
 	- высокая производительность++.
 
-  Исходники: [/Decompression/Mods/Tiny+pixel_support](/Decompression/Mods/Tiny+pixel_support)  
-  Примеры:  
-  [Arduino Nano + дисплей ST7789 240x240](/Examples/AVR/Arduino_boards/Nano_ST7789_Tiny),  
-  [ATtiny85 (чип) + вывод по SPI](/Examples/AVR/ATtiny85).  
+     Исходники: [/Decompression/Mods/Tiny+pixel_support](/Decompression/Mods/Tiny+pixel_support)  
+     Примеры:  
+     [Arduino Nano + дисплей ST7789 240x240](/Examples/AVR/Arduino_boards/Nano_ST7789_Tiny),  
+     [ATtiny85 (чип) + вывод по SPI](/Examples/AVR/ATtiny85).  
 
 \* Относится только к платформе AVR.  
 ** Чтобы это сделать, надо вместо указателя на массив данных передать в процедуру декомпрессии указатель на массив указателей на "дальние" данные:
