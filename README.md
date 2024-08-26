@@ -63,7 +63,8 @@ Compression settings are configured at the bottom of the window:
 After clicking on the "Compress" button and selecting the path to save the file, data analysis is performed first (blue progress bar), and then compression and writing the array to the output file (green progress bar).  
 ${\color{red}Attention!}$ The file name will be used as the base for macro names and constant names in the generated file.
 
-In the near future, I will release a video on [my YouTube channel](https://youtube.com/@DmitryMuravyev), in which I will show the sequence of actions more clearly.
+You can learn more about how to work with the application and decompression class here (Eng subs available):  
+[![Click to see](https://img.youtube.com/vi/ywL50YZ6wRk/maxresdefault.jpg)](https://youtu.be/ywL50YZ6wRk)
 
 <h2>Decompression</h2>
 
