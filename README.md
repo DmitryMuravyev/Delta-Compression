@@ -64,6 +64,7 @@ After clicking on the "Compress" button and selecting the path to save the file,
 ${\color{red}Attention!}$ The file name will be used as the base for macro names and constant names in the generated file.
 
 You can learn more about how to work with the application and decompression class here (Eng subs available):  
+
 [![Click to see](https://img.youtube.com/vi/ywL50YZ6wRk/maxresdefault.jpg)](https://youtu.be/ywL50YZ6wRk)
 
 <h2>Decompression</h2>
