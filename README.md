@@ -197,6 +197,6 @@ Delta encoding - [https://en.wikipedia.org/wiki/Delta_encoding](https://en.wikip
 
 List of monochrome and RGB color formats - [https://en.wikipedia.org/wiki/List_of_monochrome_and_RGB_color_formats](https://en.wikipedia.org/wiki/List_of_monochrome_and_RGB_color_formats)
 
-Girls - https://www.freepik.com/free-photo/woman-with-beautiful-body_9828277.htm
+Ladies - https://www.freepik.com/free-photo/woman-with-beautiful-body_9828277.htm
 https://www.pexels.com/photo/woman-wearing-black-top-1642161/
 https://www.freepik.com/free-photo/hispanic-woman-wearing-lingerie-smiling-doing-phone-gesture-with-hand-fingers-like-talking-telephone-communicating-concepts_53265959.htm
