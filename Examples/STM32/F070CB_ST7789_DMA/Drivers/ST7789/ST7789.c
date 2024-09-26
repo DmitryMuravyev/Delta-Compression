@@ -224,8 +224,9 @@ void ST7789_fillPixels(uint16_t color, uint16_t count) {
 	}
 
 #else
-	for (uint16_t pixel = 0; pixel < ST7789_DISPLAY_WIDTH * ST7789_DISPLAY_HEIGHT; pixel++) {
+	while (count) {
 		HAL_SPI_Transmit(&ST7789_SPI_HANDLE, (uint8_t *)&color, sizeof(color), HAL_MAX_DELAY);
+		count--;
 	}
 #endif
 }
