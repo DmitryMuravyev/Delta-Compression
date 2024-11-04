@@ -105,7 +105,7 @@ static Decompression decomp;
 decomp.bufferWidth = LOGO_IMAGE_WIDTH;
 ```
 
-And don't forget to reset the decompressor's environment variables before unpacking a new object:
+And don't forget to reset the decompressor's environment variables before unpacking next object:
 
 ```C
 decomp.resetDecompression();
