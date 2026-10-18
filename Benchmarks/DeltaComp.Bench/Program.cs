@@ -17,6 +17,7 @@ using DeltaComp.Bench;
 //   --decoder DIR       round-trip check with the PC build of the C++ decoder (see Benchmarks/Decoder/build.sh)
 //   --update-baseline   write the output sizes and hashes of the reference engine to Benchmarks/baseline.json
 //   --csv FILE          also write the results as CSV
+//   --optimal           build the optimal chain of blocks (output differs: compared with the baseline by size)
 //
 // Exit code is 1 if any output differs from the baseline or a round trip fails.
 
@@ -40,6 +41,7 @@ for (int i = 0; i < args.Length; i++)
         case "--decoder": decoderDir = args[++i]; break;
         case "--update-baseline": updateBaseline = true; break;
         case "--csv": csvPath = args[++i]; break;
+        case "--optimal": Runner.OptimalChain = true; break;
         default: Console.Error.WriteLine($"Unknown option: {args[i]}"); return 2;
     }
 }
@@ -99,8 +101,16 @@ foreach (BenchCase c in cases)
         string baselineStatus = "-";
         if (baseline.TryGetValue(c.Name, out BaselineEntry? entry))
         {
-            baselineStatus = entry.Sha256 == res.Sha256 ? "same" : "DIFF";
-            if (baselineStatus == "DIFF") failed = true;
+            if (Runner.OptimalChain && (engine == Engine.Current))
+            {
+                // The output is expected to differ, so report the size change instead
+                baselineStatus = $"{(res.Output.Length - entry.Bytes) * 100.0 / entry.Bytes:+0.00;-0.00;0.00}%";
+            }
+            else
+            {
+                baselineStatus = entry.Sha256 == res.Sha256 ? "same" : "DIFF";
+                if (baselineStatus == "DIFF") failed = true;
+            }
         }
 
         string decodeStatus = "-";

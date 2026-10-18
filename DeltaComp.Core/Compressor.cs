@@ -217,6 +217,10 @@ namespace DeltaComp
         }
 
         public bool UseBruteForceBestBlockSearch = true;
+
+        // Build the chain of blocks with the minimum total size (dynamic programming) instead of
+        // the frame-by-frame efficiency analysis. The output format is the same.
+        public bool UseOptimalBlockChain = false;
         public bool SplitToSquares = false;
         public byte WidthOfSquare
         {
@@ -361,7 +365,7 @@ namespace DeltaComp
             //var watch = Stopwatch.StartNew();
 
             // Multithreaded search for the best blocks
-            if (_bestBlocksArrayUsed)
+            if (_bestBlocksArrayUsed && !UseOptimalBlockChain)
             {
                 // We could use Parallel.For for this purpose...
 
@@ -400,7 +404,7 @@ namespace DeltaComp
             // Process data analysis (building a chain of blocks).
             UpdateStatus(CompressionStage.Analysis, 0);
 
-            var mainBlockChain = SmartBuildBlocks(0, TotalFrames);
+            var mainBlockChain = UseOptimalBlockChain ? BuildOptimalBlocks() : SmartBuildBlocks(0, TotalFrames);
 
             // Compressing stage
             UpdateStatus(CompressionStage.Compression, 0);
@@ -700,6 +704,416 @@ namespace DeltaComp
             }
 
             return (mainBlockChain);
+        }
+
+
+        // Build the chain of blocks with the minimum total size in bits.
+        //
+        // Let Best(p) be the smallest size of the data from frame p to the end. Then
+        //   Best(p) = min over l of [ Bits(p, l) + Best(p + l) ],
+        // where Bits(p, l) is the smallest block of exactly l frames starting at p. Going backwards
+        // from the end gives the optimal chain for the chosen block size field and square size.
+        //
+        // Bits(p, l) is cheap: for each channel the cheapest method that lasts at least l frames is
+        // the narrowest Fixed window that still fits, the narrowest Adaptive window that still fits,
+        // or no compression, and the narrowest fitting window only grows with l.
+        // Since Bits(p, l) never decreases with l, the search over l stops as soon as Bits(p, l)
+        // alone is not smaller than the best total found so far.
+        private List<Block> BuildOptimalBlocks()
+        {
+            UInt64[] best = new UInt64[TotalFrames + 1];
+            UInt32[] bestLength = new UInt32[TotalFrames];
+            var lengths = new ChannelMethodLengths(this);
+
+            for (Int64 p = (Int64)TotalFrames - 1; p >= 0; p--)
+            {
+                if ((p & 0xFFF) == 0)
+                {
+                    CheckCompressionCanceled();
+                    UpdateStatus(CompressionStage.Analysis, (UInt32)(TotalFrames - p));
+                }
+
+                UInt32 position = (UInt32)p;
+                lengths.CalculateBackward(position);
+
+                UInt32 maxLength = (UInt32)Math.Min((UInt64)_maxBlockSize, (UInt64)TotalFrames - position);
+                UInt64 bestBits = UInt64.MaxValue;
+                UInt32 bestBlockLength = 0;
+                lengths.ResetCursors();
+
+                // Bits(p, l) is piecewise linear in l, so we go segment by segment: within a segment
+                // every channel keeps its cheapest method and Bits(p, l) = a + s * l.
+                UInt32 l = 1;
+                bool done = false;
+                while (!done && (l <= maxLength))
+                {
+                    UInt64 a = _headerBits, slope = 0;
+                    UInt32 segmentEnd = maxLength;
+                    for (byte c = 0; c < ChannelsCount; c++)
+                    {
+                        lengths.GetCostLine(c, l, maxLength, out UInt64 channelA, out UInt64 channelSlope, out UInt32 channelEnd);
+                        a += channelA;
+                        slope += channelSlope;
+                        if (channelEnd < segmentEnd) segmentEnd = channelEnd;
+                    }
+
+                    UInt64 bits = a + slope * l;
+                    UInt32 index = position + l;
+                    for (; l <= segmentEnd; l++, index++, bits += slope)
+                    {
+                        if (bits >= bestBits) { done = true; break; }
+
+                        UInt64 total = bits + best[index];
+                        if (total < bestBits)
+                        {
+                            bestBits = total;
+                            bestBlockLength = l;
+                        }
+                    }
+                }
+
+                best[position] = bestBits;
+                bestLength[position] = bestBlockLength;
+            }
+
+            // Restore the chain
+            var chain = new List<Block>();
+            for (UInt32 position = 0; position < TotalFrames; position += bestLength[position])
+            {
+                UInt32 length = bestLength[position];
+                lengths.Calculate(position);
+                lengths.ResetCursors();
+
+                Block block = new Block()
+                {
+                    StartFrame = position,
+                    Length = length,
+                    Methods = new byte[ChannelsCount],
+                    InitialValues = new UInt32[ChannelsCount]
+                };
+                for (byte c = 0; c < ChannelsCount; c++)
+                {
+                    lengths.GetMinCost(c, length, out byte method);
+                    block.Methods[c] = method;
+                    block.InitialValues[c] = lengths.GetInitialValue(c, method);
+                }
+                block.Efficiency = GetBlockEfficiency(length, block.Methods);
+                chain.Add(block);
+            }
+
+            return (chain);
+        }
+
+
+        // Lengths of all methods of all channels for one start position, plus the cheapest
+        // method lookup for a growing block length (see BuildOptimalBlocks()).
+        private sealed class ChannelMethodLengths
+        {
+            private readonly Compressor _compressor;
+            private readonly UInt32[][] _fixedLengths, _fixedInitialValues, _adaptiveLengths;
+            private readonly sbyte[][] _fixedMethodIndex, _adaptiveMethodIndex; // real window -> method index (-1 if unused)
+            private readonly byte[] _fixedCursor, _adaptiveCursor;
+            private UInt32 _position;
+
+            public ChannelMethodLengths(Compressor compressor)
+            {
+                _compressor = compressor;
+                int channels = compressor.ChannelsCount;
+                _fixedLengths = new UInt32[channels][];
+                _fixedInitialValues = new UInt32[channels][];
+                _adaptiveLengths = new UInt32[channels][];
+                _fixedMethodIndex = new sbyte[channels][];
+                _adaptiveMethodIndex = new sbyte[channels][];
+                _fixedCursor = new byte[channels];
+                _adaptiveCursor = new byte[channels];
+
+                for (byte c = 0; c < channels; c++)
+                {
+                    byte bitDepth = compressor.BitsPerChannel[c];
+                    _fixedLengths[c] = new UInt32[Constants.MaxBitsPerChannel];
+                    _fixedInitialValues[c] = new UInt32[Constants.MaxBitsPerChannel];
+                    _adaptiveLengths[c] = new UInt32[Constants.MaxBitsPerChannel];
+                    _fixedMethodIndex[c] = Enumerable.Repeat((sbyte)-1, bitDepth).ToArray();
+                    _adaptiveMethodIndex[c] = Enumerable.Repeat((sbyte)-1, bitDepth).ToArray();
+
+                    for (byte m = 0; m < compressor._methodsCount[c]; m++)
+                    {
+                        bool afw = false;
+                        byte realMethod = compressor.GetRealMethod(m, bitDepth, ref afw);
+                        if (realMethod == bitDepth) continue; // no compression
+                        if (afw) _adaptiveMethodIndex[c][realMethod] = (sbyte)m;
+                        else _fixedMethodIndex[c][realMethod] = (sbyte)m;
+                    }
+                }
+            }
+
+            // Incremental version of Calculate() for the backward pass: must be called for
+            // TotalFrames - 1, TotalFrames - 2, ..., 0 in turn. O(number of methods) per position (amortized)
+            // instead of scanning the data:
+            //  - a Fixed window block [p, end) stays valid when p moves left only if the range still fits,
+            //    so 'end' only moves left too, and the min/max of the block are kept in monotonic deques;
+            //  - an Adaptive window block breaks at the first pair of neighboring frames that doesn't fit,
+            //    so we only need to know where the next such pair is.
+            public void CalculateBackward(UInt32 position)
+            {
+                _position = position;
+                UInt32 totalFrames = _compressor.TotalFrames;
+                UInt32 maxBlockSize = _compressor._maxBlockSize;
+
+                if (_backward == null)
+                {
+                    _backward = new BackwardState[_compressor.ChannelsCount];
+                    for (byte c = 0; c < _compressor.ChannelsCount; c++) _backward[c] = new BackwardState(_compressor, c);
+                }
+
+                for (byte c = 0; c < _compressor.ChannelsCount; c++)
+                {
+                    BackwardState state = _backward[c];
+                    byte bitDepth = _compressor.BitsPerChannel[c];
+                    ReadOnlySpan<UInt32> frames = _compressor._frames[c];
+                    UInt32 currentFrame = frames[(int)position];
+
+                    for (byte w = 0; w < bitDepth; w++)
+                    {
+                        if (_fixedMethodIndex[c][w] < 0) continue;
+
+                        MonotonicDeque min = state.Min[w], max = state.Max[w];
+                        min.PushFront(position, currentFrame, true);
+                        max.PushFront(position, currentFrame, false);
+
+                        UInt32 end = state.FixedEnd[w];
+                        UInt32 maxDelta = (w < 32) ? ((1u << w) - 1) : UInt32.MaxValue;
+                        UInt64 maxEnd = Math.Min((UInt64)position + maxBlockSize, totalFrames);
+                        while ((end > maxEnd) || (max.BackValue - min.BackValue > maxDelta))
+                        {
+                            end--;
+                            min.RemoveBackIndex(end);
+                            max.RemoveBackIndex(end);
+                        }
+                        state.FixedEnd[w] = end;
+                        _fixedLengths[c][w] = end - position;
+                        _fixedInitialValues[c][w] = min.BackValue;
+                    }
+
+                    // Adaptive windows: does the next frame fit into the window around this one?
+                    UInt32 frameWidth = Pow2(bitDepth);
+                    for (byte w = 1; w < bitDepth; w++)
+                    {
+                        if (_adaptiveMethodIndex[c][w] < 0) continue;
+
+                        if (position + 1 < totalFrames)
+                        {
+                            UInt32 nextFrame = frames[(int)position + 1];
+                            UInt32 windowWidth = 1u << w;
+                            UInt32 halfWindowWidth = windowWidth >> 1;
+                            UInt32 maxFrameStart = frameWidth - windowWidth;
+                            UInt32 windowStart;
+                            if (halfWindowWidth < currentFrame)
+                            {
+                                windowStart = currentFrame - halfWindowWidth;
+                                if (windowStart > maxFrameStart) windowStart = maxFrameStart;
+                            }
+                            else
+                            {
+                                windowStart = 0;
+                            }
+                            if (!((nextFrame >= windowStart) && ((nextFrame - windowStart) < windowWidth)))
+                                state.AdaptiveBreak[w] = position + 1;
+                        }
+                        else
+                        {
+                            state.AdaptiveBreak[w] = totalFrames;
+                        }
+
+                        _adaptiveLengths[c][w] = (UInt32)Math.Min(Math.Min((UInt64)state.AdaptiveBreak[w] - position, maxBlockSize),
+                                                                  (UInt64)totalFrames - position);
+                    }
+                }
+            }
+
+
+            private BackwardState[]? _backward;
+
+            private sealed class BackwardState
+            {
+                public readonly MonotonicDeque[] Min, Max;
+                public readonly UInt32[] FixedEnd;      // exclusive end of the longest Fixed window block
+                public readonly UInt32[] AdaptiveBreak; // first frame that doesn't fit the Adaptive window around the previous one
+
+                public BackwardState(Compressor compressor, byte channel)
+                {
+                    byte bitDepth = compressor.BitsPerChannel[channel];
+                    int capacity = (int)Math.Min((UInt64)compressor._maxBlockSize + 2, (UInt64)compressor.TotalFrames + 2);
+                    Min = new MonotonicDeque[bitDepth];
+                    Max = new MonotonicDeque[bitDepth];
+                    for (int w = 0; w < bitDepth; w++)
+                    {
+                        Min[w] = new MonotonicDeque(capacity);
+                        Max[w] = new MonotonicDeque(capacity);
+                    }
+                    FixedEnd = Enumerable.Repeat(compressor.TotalFrames, bitDepth).ToArray();
+                    AdaptiveBreak = Enumerable.Repeat(compressor.TotalFrames, bitDepth).ToArray();
+                }
+            }
+
+
+            // A sliding window minimum/maximum for a window that grows at the front (lower indexes)
+            // and shrinks at the back (higher indexes). The minimum (or maximum) is at the back.
+            private sealed class MonotonicDeque
+            {
+                private readonly UInt32[] _indexes, _values;
+                private int _front, _count;
+
+                public MonotonicDeque(int capacity)
+                {
+                    _indexes = new UInt32[capacity];
+                    _values = new UInt32[capacity];
+                }
+
+                public UInt32 BackValue => _values[(_front + _count - 1) % _values.Length];
+
+                public void PushFront(UInt32 index, UInt32 value, bool isMin)
+                {
+                    // Drop the front elements that can never be the extremum while the new one is in the window
+                    while (_count > 0)
+                    {
+                        UInt32 frontValue = _values[_front];
+                        if (isMin ? (frontValue >= value) : (frontValue <= value)) { _front = (_front + 1) % _values.Length; _count--; }
+                        else break;
+                    }
+                    _front = (_front - 1 + _values.Length) % _values.Length;
+                    _indexes[_front] = index;
+                    _values[_front] = value;
+                    _count++;
+                }
+
+                public void RemoveBackIndex(UInt32 index)
+                {
+                    if ((_count > 0) && (_indexes[(_front + _count - 1) % _indexes.Length] == index)) _count--;
+                }
+            }
+
+
+            public void Calculate(UInt32 position)
+            {
+                _position = position;
+                for (byte c = 0; c < _compressor.ChannelsCount; c++)
+                {
+                    _compressor.GetMaxBlockLengths(position, c, _fixedLengths[c], _fixedInitialValues[c]);
+                    _compressor.GetMaxBlockLengths3(position, c, _adaptiveLengths[c]);
+                }
+            }
+
+            public void ResetCursors()
+            {
+                Array.Clear(_fixedCursor);
+                Array.Fill(_adaptiveCursor, (byte)1);
+            }
+
+            // The cheapest method of the channel that lasts at least 'length' frames.
+            // Must be called with non-decreasing lengths after ResetCursors().
+            public UInt64 GetMinCost(byte channel, UInt32 length, out byte method)
+            {
+                byte bitDepth = _compressor.BitsPerChannel[channel];
+                sbyte[] fixedIndex = _fixedMethodIndex[channel], adaptiveIndex = _adaptiveMethodIndex[channel];
+
+                // No compression is always possible
+                method = bitDepth;
+                UInt64 minCost = (UInt64)length * bitDepth;
+
+                // The narrowest Fixed window that lasts long enough (wider ones only cost more)
+                byte w = _fixedCursor[channel];
+                while ((w < bitDepth) && ((fixedIndex[w] < 0) || (_fixedLengths[channel][w] < length))) w++;
+                _fixedCursor[channel] = w;
+                if (w < bitDepth)
+                {
+                    UInt64 cost = bitDepth + (UInt64)length * w;
+                    if (cost < minCost) { minCost = cost; method = (byte)fixedIndex[w]; }
+                }
+
+                // The same for the Adaptive Floating window
+                w = _adaptiveCursor[channel];
+                while ((w < bitDepth) && ((adaptiveIndex[w] < 0) || (_adaptiveLengths[channel][w] < length))) w++;
+                _adaptiveCursor[channel] = w;
+                if (w < bitDepth)
+                {
+                    UInt64 cost = bitDepth + (UInt64)(length - 1) * w;
+                    if (cost < minCost) { minCost = cost; method = (byte)adaptiveIndex[w]; }
+                }
+
+                return (minCost);
+            }
+
+            // The cost of the cheapest method of the channel for the block length 'length' as a line a + slope * length,
+            // and the last length ('end') up to which this line stays the cheapest.
+            // Must be called with non-decreasing lengths after ResetCursors().
+            public void GetCostLine(byte channel, UInt32 length, UInt32 maxLength, out UInt64 a, out UInt64 slope, out UInt32 end)
+            {
+                byte bitDepth = _compressor.BitsPerChannel[channel];
+                sbyte[] fixedIndex = _fixedMethodIndex[channel], adaptiveIndex = _adaptiveMethodIndex[channel];
+
+                // Candidates: the narrowest Fixed and Adaptive windows that last long enough, and no compression.
+                // Lines: Fixed k + w * l, Adaptive (k - w) + w * l, no compression k * l.
+                Span<UInt64> lineA = stackalloc UInt64[3];
+                Span<UInt64> lineSlope = stackalloc UInt64[3];
+                Span<UInt32> lineEnd = stackalloc UInt32[3];
+                int lines = 0;
+
+                lineA[lines] = 0; lineSlope[lines] = bitDepth; lineEnd[lines] = maxLength; lines++;
+
+                byte w = _fixedCursor[channel];
+                while ((w < bitDepth) && ((fixedIndex[w] < 0) || (_fixedLengths[channel][w] < length))) w++;
+                _fixedCursor[channel] = w;
+                if (w < bitDepth)
+                {
+                    lineA[lines] = bitDepth; lineSlope[lines] = w; lineEnd[lines] = Math.Min(_fixedLengths[channel][w], maxLength); lines++;
+                }
+
+                w = _adaptiveCursor[channel];
+                while ((w < bitDepth) && ((adaptiveIndex[w] < 0) || (_adaptiveLengths[channel][w] < length))) w++;
+                _adaptiveCursor[channel] = w;
+                if (w < bitDepth)
+                {
+                    lineA[lines] = (UInt64)(bitDepth - w); lineSlope[lines] = w; lineEnd[lines] = Math.Min(_adaptiveLengths[channel][w], maxLength); lines++;
+                }
+
+                // The cheapest line at 'length'
+                int current = 0;
+                UInt64 minCost = UInt64.MaxValue;
+                for (int i = 0; i < lines; i++)
+                {
+                    UInt64 cost = lineA[i] + lineSlope[i] * length;
+                    if (cost < minCost) { minCost = cost; current = i; }
+                }
+
+                a = lineA[current];
+                slope = lineSlope[current];
+
+                // It stays the cheapest until one of the candidates ends (then the candidates change)
+                // or a line with a smaller slope becomes cheaper.
+                end = maxLength;
+                for (int i = 0; i < lines; i++)
+                {
+                    if (lineEnd[i] < end) end = lineEnd[i];
+                    if (lineSlope[i] < slope)
+                    {
+                        // The first l with lineA[i] + lineSlope[i] * l < a + slope * l
+                        UInt64 crossing = (lineA[i] - a) / (slope - lineSlope[i]) + 1;
+                        if (crossing - 1 < end) end = (UInt32)(crossing - 1);
+                    }
+                }
+                if (end < length) end = length;
+            }
+
+
+            public UInt32 GetInitialValue(byte channel, byte method)
+            {
+                byte bitDepth = _compressor.BitsPerChannel[channel];
+                if (method == bitDepth) return (0);
+                bool afw = false;
+                byte realMethod = _compressor.GetRealMethod(method, bitDepth, ref afw);
+                return (afw ? _compressor._frames[channel][_position] : _fixedInitialValues[channel][realMethod]);
+            }
         }
 
 

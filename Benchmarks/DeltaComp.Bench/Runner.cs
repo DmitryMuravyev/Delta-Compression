@@ -33,6 +33,9 @@ namespace DeltaComp.Bench
 
     public static class Runner
     {
+        // Build the chain of blocks with BuildOptimalBlocks() (changes the output, so it's compared by size)
+        public static bool OptimalChain = false;
+
         public static RunResult Run(BenchCase c, LoadedSource source, Engine engine)
         {
             var output = new List<byte>(1 << 16);
@@ -58,6 +61,7 @@ namespace DeltaComp.Bench
                 compressor.BlockSizeBits = c.BlockSizeBits;
                 compressor.DeltaCalculationOption = c.Delta;
                 compressor.UseBruteForceBestBlockSearch = c.BruteForce;
+                compressor.UseOptimalBlockChain = OptimalChain;
                 compressor.Compress(null);
                 if (compressor.Stage != CompressionStage.Done) throw new InvalidOperationException($"{c.Name}: stage {compressor.Stage}");
                 bitsPerFrame = compressor.BitsPerFrame;
