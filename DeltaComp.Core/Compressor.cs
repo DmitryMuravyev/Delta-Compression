@@ -60,14 +60,10 @@ using System.Diagnostics;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
-using System.Windows.Threading;
-using System.Windows;
 using System.Threading;
 using System.Diagnostics.CodeAnalysis;
 using System.Threading.Channels;
-using System.Windows.Media;
 using System.Runtime.Intrinsics.X86;
-using System.Windows.Documents;
 
 
 namespace DeltaComp
@@ -529,11 +525,8 @@ namespace DeltaComp
                 Stage = currentStage;
                 if ((currentStage != CompressionStage.Cancelled) &&
                     (currentStage != CompressionStage.Failed)) Progress = newProgress;
-                if (_updateProgressDelegate != null)
-                {
-                    // Since the method will update the UI, we have to call it from the main thread
-                    Application.Current.Dispatcher.Invoke(new Action(() => _updateProgressDelegate(Stage, Progress)));
-                }
+                // The delegate is responsible for marshalling the call to the UI thread (if needed)
+                _updateProgressDelegate?.Invoke(Stage, Progress);
             }
         }
 

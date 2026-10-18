@@ -1146,7 +1146,7 @@ namespace DeltaComp
 
                 BitmapDataSource dataSource = (BitmapDataSource)currentContext.Source;
                 _compressor = new Compressor(channels, (UInt16)dataSource.Width, (UInt16)dataSource.Height, 
-                    dataSource.MultithreadedReadingAllowed, WriteCompressedByteDelegate, UpdateProgressDelegate);
+                    dataSource.MultithreadedReadingAllowed, WriteCompressedByteDelegate, DispatchUpdateProgressDelegate);
                 SquaringOption selectedOption = (SquaringOption)ImageSplitIntoSquaresComboBox.SelectedItem;
                 if (selectedOption.Size > 1)
                 {
@@ -1166,7 +1166,7 @@ namespace DeltaComp
 
                 FileDataSource dataSource = (FileDataSource)currentContext.Source;
                 _compressor = new Compressor(channels, (UInt32)dataSource.FramesCount, dataSource.MultithreadedReadingAllowed, 
-                    WriteCompressedByteDelegate, UpdateProgressDelegate);
+                    WriteCompressedByteDelegate, DispatchUpdateProgressDelegate);
             }
             else
             {
@@ -1269,6 +1269,13 @@ namespace DeltaComp
                 _compressor.RequestFallingIntoError();
                 DisplayMessage(MessageBoxImage.Error, _export.LastErrorMessage, Constants.ErrorWindowCaption);
             }
+        }
+
+
+        // The compressor reports progress from worker threads, so we have to marshal the call to the UI thread
+        private void DispatchUpdateProgressDelegate(CompressionStage stage, double progress)
+        {
+            Dispatcher.Invoke(() => UpdateProgressDelegate(stage, progress));
         }
 
 

@@ -1,0 +1,97 @@
+{
+  "gradient-565-2x2": {
+    "Bytes": 17468,
+    "Sha256": "e35fab547d5b6bf5386101b8df9762e0d3f1dda56613183340acc7c4e936742f",
+    "Efficiency": 84.84
+  },
+  "gradient-gray": {
+    "Bytes": 16282,
+    "Sha256": "3be9533f33184244b9232eca3da226c469ad1f55494360cc5261b059cca3762b",
+    "Efficiency": 71.73
+  },
+  "icons-888": {
+    "Bytes": 29382,
+    "Sha256": "b513e6282aa26849bb8d5ab203d49a96fa1a459826b0b9ffe8070ece2cb6b965",
+    "Efficiency": 83
+  },
+  "logo-565-2x2": {
+    "Bytes": 15546,
+    "Sha256": "21bc54002d1eee20d19559604b6c47cb1012002f732e0eb28b052f4b0996e66d",
+    "Efficiency": 86.51
+  },
+  "logo-565-2x2-fast": {
+    "Bytes": 15684,
+    "Sha256": "a3ebd3fbaca1ee6fe0331331716bbdc400cb9eb157f8b0020aecb85675e80e68",
+    "Efficiency": 86.39
+  },
+  "logo-565-afw-only": {
+    "Bytes": 15183,
+    "Sha256": "471d2f4424e16f4ceb767d5b5fbd65a08200d5ba3e43c8a71865af8f21fff38c",
+    "Efficiency": 86.82
+  },
+  "logo-565-fw-only": {
+    "Bytes": 14942,
+    "Sha256": "049b6757e3cdc52d2ae20f5ee5a96a44942a3695110914ae7252e8d37faff877",
+    "Efficiency": 87.03
+  },
+  "logo-888": {
+    "Bytes": 26734,
+    "Sha256": "9c4d25bb18c529c19cedf8a1b9293e46647983538cf27e24226a366ac2070bf0",
+    "Efficiency": 84.53
+  },
+  "logo-888-fast": {
+    "Bytes": 29617,
+    "Sha256": "fddae2fd88a073e3dc75999a971b6d036e82d6dbbf106cce32adbfffd263c23d",
+    "Efficiency": 82.86
+  },
+  "logo-gray": {
+    "Bytes": 12678,
+    "Sha256": "43123a3801a857a7046ad28f9b943b7c055b46f5773119095ff4d3c027e6ecbe",
+    "Efficiency": 77.99
+  },
+  "logo-gray-2x2": {
+    "Bytes": 10624,
+    "Sha256": "f8cc77bf8cc0098462c9be2087a8eb174132cde49cd6cb19a1dbd100f3a3dc50",
+    "Efficiency": 81.56
+  },
+  "mattress-gray": {
+    "Bytes": 23231,
+    "Sha256": "750724f315cf3d8f6d7a038356a2cc4a49009fa6e853c945d35e2ae6f2cdf5da",
+    "Efficiency": 59.67
+  },
+  "mit-text": {
+    "Bytes": 28431,
+    "Sha256": "a4ac1ec94cab9a391a176729e4974a2eb22986b15902b3b81ffe8244135fbf35",
+    "Efficiency": 13.24
+  },
+  "nebula-565-2x2": {
+    "Bytes": 62974,
+    "Sha256": "0f4cf779de73717686edc20b6b9decd17992d0970ab02c906ea90f90e3d04a42",
+    "Efficiency": 45.34
+  },
+  "nebula-888-fast": {
+    "Bytes": 128461,
+    "Sha256": "499413a19ee83ee0d30937ef9243bcfa8fbd0ab8ffee6692a54f802262527dde",
+    "Efficiency": 25.66
+  },
+  "noise-gray": {
+    "Bytes": 50233,
+    "Sha256": "0c72f1ea2f4599fcdce3415c926290d686f54b9a8506f9a9efe2fd6243f4a8a9",
+    "Efficiency": 12.79
+  },
+  "parrot-565-2x2": {
+    "Bytes": 41318,
+    "Sha256": "c7375e5bf07fbd59261dd6bf30640cf462851f177c12f26ec46e146d8d3cc5af",
+    "Efficiency": 31.14
+  },
+  "parrot-565-afw-first": {
+    "Bytes": 43097,
+    "Sha256": "7a9e5f7942fd9ab446fb6d0a163acf1e74c8a438c02ea46c9b165d50d0782b40",
+    "Efficiency": 28.17
+  },
+  "parrot-gray-2x2": {
+    "Bytes": 23391,
+    "Sha256": "a886aa296c5d1d92a061f278c6ef085b1b7ed583fb4f9d0299ac6438fe6f7164",
+    "Efficiency": 22.03
+  }
+}

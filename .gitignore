@@ -1,0 +1,8 @@
+# Build output
+bin/
+obj/
+.vs/
+*.user
+
+# Native round-trip decoder builds
+Benchmarks/Decoder/bin/
