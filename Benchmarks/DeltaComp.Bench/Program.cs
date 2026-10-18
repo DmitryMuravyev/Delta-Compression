@@ -18,6 +18,7 @@ using DeltaComp.Bench;
 //   --update-baseline   write the output sizes and hashes of the reference engine to Benchmarks/baseline.json
 //   --csv FILE          also write the results as CSV
 //   --optimal           build the optimal chain of blocks (output differs: compared with the baseline by size)
+//   --sweep             with --optimal: find the best block size field (and square size for images) per case
 //
 // Exit code is 1 if any output differs from the baseline or a round trip fails.
 
@@ -25,7 +26,7 @@ CultureInfo.DefaultThreadCurrentCulture = CultureInfo.InvariantCulture;
 CultureInfo.CurrentCulture = CultureInfo.InvariantCulture;
 
 string[] filters = [];
-bool quick = false, updateBaseline = false;
+bool quick = false, updateBaseline = false, sweep = false;
 string engineArg = "current";
 int repeat = 1;
 string? decoderDir = null, csvPath = null;
@@ -42,6 +43,7 @@ for (int i = 0; i < args.Length; i++)
         case "--update-baseline": updateBaseline = true; break;
         case "--csv": csvPath = args[++i]; break;
         case "--optimal": Runner.OptimalChain = true; break;
+        case "--sweep": sweep = true; break;
         default: Console.Error.WriteLine($"Unknown option: {args[i]}"); return 2;
     }
 }
@@ -70,6 +72,33 @@ var cases = BenchCase.All
     .Where(c => filters.Length == 0 || filters.Any(f => c.Name.Contains(f, StringComparison.OrdinalIgnoreCase)))
     .Where(c => !quick || !c.Slow)
     .ToList();
+
+if (sweep)
+{
+    if (!Runner.OptimalChain) { Console.Error.WriteLine("--sweep needs --optimal"); return 2; }
+    Console.WriteLine($"{"case",-22} {"baseline",9} {"same settings",14} {"best",9} {"vs baseline",12}  best settings");
+    foreach (BenchCase c in cases.Where(c => c.BruteForce))
+    {
+        LoadedSource source = LoadedSource.Load(c, dataDir);
+        int sameSettings = Runner.Run(c, source, Engine.Current).Output.Length;
+        (int bytes, byte bits, byte square) bestFound = (int.MaxValue, 0, 0);
+        byte[] squares = source.IsImage ? [1, 2, 3, 4] : [1];
+        foreach (byte square in squares)
+        {
+            if (source.IsImage && ((source.Width % square != 0) || (source.Height % square != 0))) continue;
+            for (byte bits = 1; bits <= 16; bits++)
+            {
+                int bytes = Runner.Run(c with { BlockSizeBits = bits, SquareWidth = square }, source, Engine.Current).Output.Length;
+                if (bytes < bestFound.bytes) bestFound = (bytes, bits, square);
+            }
+        }
+        int baselineBytes = baseline.TryGetValue(c.Name, out BaselineEntry? e) ? e.Bytes : 0;
+        Console.WriteLine($"{c.Name,-22} {baselineBytes,9} {sameSettings,14} {bestFound.bytes,9} " +
+                          $"{(bestFound.bytes - baselineBytes) * 100.0 / baselineBytes,11:+0.00;-0.00;0.00}%  " +
+                          $"block bits {bestFound.bits}, squares {bestFound.square}x{bestFound.square} (was {c.BlockSizeBits}, {c.SquareWidth}x{c.SquareWidth})");
+    }
+    return 0;
+}
 
 Console.WriteLine($"DeltaComp benchmark: {cases.Count} case(s), engines: {string.Join(", ", engines)}, " +
                   $"repeat: {repeat}, CPUs: {Environment.ProcessorCount}, .NET {Environment.Version}");
