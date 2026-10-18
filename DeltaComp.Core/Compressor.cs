@@ -109,6 +109,7 @@ namespace DeltaComp
             public const int WaitForBestBlockReadyEventTimeout = 1000;
             public const double MinProgressIcrease = 0.1d;
             public const int MaxStackallocMethods = 256;
+            public const int MaxBitsPerChannel = 32;
         }
 
 
@@ -797,7 +798,20 @@ namespace DeltaComp
         }
         
 
-        // Initialize and start recursive search for the best block
+        // Exact search for the best block (the same result as trying every combination of methods).
+        //
+        // Brute force over all combinations costs M^C (4096 for RGB888), but for a fixed block length L
+        // the block size is just the header plus independent per-channel costs. So for every candidate L
+        // (the distinct method lengths) we only need, per channel:
+        //   A(c) - the cheapest method that lasts at least L frames,
+        //   B(c) - the cheapest method that lasts exactly L frames (the combination length is the
+        //          shortest method, so at least one channel has to end exactly at L).
+        // The smallest block of length L is then: header + Sum(A) + min over c of (B(c) - A(c)).
+        // This is O((C*M)^2) instead of M^C.
+        //
+        // To keep the output byte-identical with the original brute force, ties are resolved the same way:
+        // the brute force keeps the first combination (in lexicographic order of methods) with the
+        // maximum efficiency, so we reconstruct exactly that combination.
         private Block GetBestBlockBruteForce(UInt32 position, UInt32 boundary)
         {
             Block bestBlock = new Block();
@@ -810,13 +824,23 @@ namespace DeltaComp
             int allMethodsCount = ChannelsCount * stride;
             Span<Method> allMethods = (allMethodsCount <= Constants.MaxStackallocMethods) ?
                 stackalloc Method[allMethodsCount] : new Method[allMethodsCount];
-            Span<byte> currentMethods = stackalloc byte[ChannelsCount];
+            Span<UInt32> candidates = (allMethodsCount <= Constants.MaxStackallocMethods) ?
+                stackalloc UInt32[allMethodsCount] : new UInt32[allMethodsCount];
+            int candidatesCount = 0;
+            UInt32 maxLength = boundary - position;
 
-            // Calculate in advance and save the applicability of all possible methods for all channels
+            // Lengths of all Fixed Window methods of a channel are found in a single pass
+            Span<UInt32> fixedLengths = stackalloc UInt32[Constants.MaxBitsPerChannel];
+            Span<UInt32> fixedInitialValues = stackalloc UInt32[Constants.MaxBitsPerChannel];
+            Span<UInt32> adaptiveLengths = stackalloc UInt32[Constants.MaxBitsPerChannel];
+
+            // Calculate in advance the applicability (length) of all possible methods for all channels
             for (byte c = 0; c < ChannelsCount; c++)
             {
                 byte methodsCount = _methodsCount[c];
                 Span<Method> channelMethods = allMethods.Slice(c * stride, methodsCount);
+                bool fixedLengthsReady = false;
+                bool adaptiveLengthsReady = false;
 
                 for (byte m = 0; m < methodsCount; m++)
                 {
@@ -825,11 +849,26 @@ namespace DeltaComp
 
                     if (realMethod != BitsPerChannel[c])
                     {
-                        if (afw) channelMethods[m].Length = GetMaxBlockLength3(position, realMethod, c, 
-                            out channelMethods[m].InitialValue);
+                        if (afw)
+                        {
+                            if (!adaptiveLengthsReady)
+                            {
+                                GetMaxBlockLengths3(position, c, adaptiveLengths);
+                                adaptiveLengthsReady = true;
+                            }
+                            channelMethods[m].Length = adaptiveLengths[realMethod];
+                            channelMethods[m].InitialValue = _frames[c][position];
+                        }
                         else
-                            channelMethods[m].Length = GetMaxBlockLength(position, realMethod, c, 
-                                out channelMethods[m].InitialValue);
+                        {
+                            if (!fixedLengthsReady)
+                            {
+                                GetMaxBlockLengths(position, c, fixedLengths, fixedInitialValues);
+                                fixedLengthsReady = true;
+                            }
+                            channelMethods[m].Length = fixedLengths[realMethod];
+                            channelMethods[m].InitialValue = fixedInitialValues[realMethod];
+                        }
                     }
                     else
                     {
@@ -837,57 +876,138 @@ namespace DeltaComp
                         channelMethods[m].InitialValue = 0;
                     }
 
+                    // The block can't go beyond the boundary
+                    if (channelMethods[m].Length > maxLength) channelMethods[m].Length = maxLength;
                     channelMethods[m].Index = m;
+
+                    // Collect distinct lengths as the candidate block lengths
+                    UInt32 length = channelMethods[m].Length;
+                    if (!candidates.Slice(0, candidatesCount).Contains(length)) candidates[candidatesCount++] = length;
                 }
             }
 
-            // Run recursive combinations search
-            SearchBestBlockRecursive(position, boundary, 0, currentMethods, allMethods, stride, ref bestBlock);
+            Span<UInt64> minCosts = stackalloc UInt64[ChannelsCount];       // A(c)
+            Span<UInt64> minExactCosts = stackalloc UInt64[ChannelsCount];  // B(c)
+            Span<byte> currentMethods = stackalloc byte[ChannelsCount];
+            Span<byte> bestMethods = stackalloc byte[ChannelsCount];
+            UInt64 noCost = UInt64.MaxValue;
+
+            // Pass 1: the maximum efficiency among all candidate lengths
+            Span<double> efficiencies = (allMethodsCount <= Constants.MaxStackallocMethods) ?
+                stackalloc double[candidatesCount] : new double[candidatesCount];
+            double maxEfficiency = double.MinValue;
+
+            for (int i = 0; i < candidatesCount; i++)
+            {
+                UInt32 length = candidates[i];
+                UInt64 bits = GetMinBitsForLength(length, allMethods, stride, minCosts, minExactCosts);
+                efficiencies[i] = (bits == noCost) ? double.MinValue :
+                    1.0d - (double)bits / ((double)length * (double)BitsPerFrame);
+                if (efficiencies[i] > maxEfficiency) maxEfficiency = efficiencies[i];
+            }
+
+            // Pass 2: the lexicographically first combination with the maximum efficiency
+            bool found = false;
+            for (int i = 0; i < candidatesCount; i++)
+            {
+                if (efficiencies[i] != maxEfficiency) continue;
+
+                UInt32 length = candidates[i];
+                UInt64 bits = GetMinBitsForLength(length, allMethods, stride, minCosts, minExactCosts);
+                GetFirstCombinationForLength(length, bits, allMethods, stride, minCosts, minExactCosts, currentMethods);
+
+                if (!found || (currentMethods.SequenceCompareTo(bestMethods) < 0))
+                {
+                    currentMethods.CopyTo(bestMethods);
+                    bestBlock.Length = length;
+                    found = true;
+                }
+            }
+
+            UInt32[] initialValues = new UInt32[ChannelsCount];
+            for (byte c = 0; c < ChannelsCount; c++)
+            {
+                initialValues[c] = allMethods[c * stride + bestMethods[c]].InitialValue;
+            }
+            bestBlock.Methods = bestMethods.ToArray();
+            bestBlock.InitialValues = initialValues;
+            bestBlock.Efficiency = maxEfficiency;
+
             return (bestBlock);
         }
 
 
-        // Recursive search for the best block by sequentially iterating through all methods of all channels
-        private void SearchBestBlockRecursive(UInt32 position, UInt32 boundary, byte currentChannel, 
-            Span<byte> currentMethods, ReadOnlySpan<Method> allMethods, int stride, ref Block bestBlock)
+        // The smallest block size (bits) among the combinations of methods with the length of exactly 'length' frames.
+        // Also fills A(c) and B(c) for this length (see GetBestBlockBruteForce).
+        private UInt64 GetMinBitsForLength(UInt32 length, ReadOnlySpan<Method> allMethods, int stride,
+            Span<UInt64> minCosts, Span<UInt64> minExactCosts)
         {
-            byte methodsCount = _methodsCount[currentChannel];
-            byte nextChannel = (byte)(currentChannel + 1);
+            UInt64 bits = _headerBits;
+            UInt64 minDelta = UInt64.MaxValue;
 
-            for (byte m = 0; m < methodsCount; m++)
+            for (byte c = 0; c < ChannelsCount; c++)
             {
-                currentMethods[currentChannel] = m;
+                UInt64 minCost = UInt64.MaxValue;
+                UInt64 minExactCost = UInt64.MaxValue;
+                ReadOnlySpan<Method> channelMethods = allMethods.Slice(c * stride, _methodsCount[c]);
 
-                if (nextChannel < ChannelsCount)
+                for (byte m = 0; m < channelMethods.Length; m++)
                 {
-                    // If current channel is not the last one then run recursive search for the next one.
-                    SearchBestBlockRecursive(position, boundary, nextChannel, currentMethods, allMethods, stride, ref bestBlock);
-                } else
+                    if (channelMethods[m].Length < length) continue;
+                    UInt64 cost = GetCompressedBitsForMethod(length, m, BitsPerChannel[c]);
+                    if (cost < minCost) minCost = cost;
+                    if ((channelMethods[m].Length == length) && (cost < minExactCost)) minExactCost = cost;
+                }
+
+                minCosts[c] = minCost;
+                minExactCosts[c] = minExactCost;
+                if (minCost == UInt64.MaxValue) return (UInt64.MaxValue);
+                bits += minCost;
+                if ((minExactCost != UInt64.MaxValue) && ((minExactCost - minCost) < minDelta)) minDelta = minExactCost - minCost;
+            }
+
+            if (minDelta == UInt64.MaxValue) return (UInt64.MaxValue);
+            return (bits + minDelta);
+        }
+
+
+        // Reconstruct the lexicographically first combination of methods with the length
+        // of exactly 'length' frames and the size of 'bits' (which is the minimum for this length).
+        // Uses A(c) and B(c) calculated by GetMinBitsForLength() for the same length.
+        private void GetFirstCombinationForLength(UInt32 length, UInt64 bits, ReadOnlySpan<Method> allMethods, int stride,
+            ReadOnlySpan<UInt64> minCosts, ReadOnlySpan<UInt64> minExactCosts, Span<byte> methods)
+        {
+            UInt64 prefixBits = _headerBits;
+            bool lengthReached = false; // whether some channel of the prefix ends exactly at 'length'
+
+            for (byte c = 0; c < ChannelsCount; c++)
+            {
+                // The minimum the remaining channels can add, with and without the "exact length" requirement
+                UInt64 restBits = 0;
+                UInt64 restMinDelta = UInt64.MaxValue;
+                for (int cc = c + 1; cc < ChannelsCount; cc++)
                 {
-                    // If the channel is the last one, then trim the length to the shortest method,
-                    // this is OK here, since we will eventually go through all the combinations.
-                    UInt32 minLength = boundary - position;
-                    for (byte c = 0; c < ChannelsCount; c++)
+                    restBits += minCosts[cc];
+                    if ((minExactCosts[cc] != UInt64.MaxValue) && ((minExactCosts[cc] - minCosts[cc]) < restMinDelta))
+                        restMinDelta = minExactCosts[cc] - minCosts[cc];
+                }
+
+                ReadOnlySpan<Method> channelMethods = allMethods.Slice(c * stride, _methodsCount[c]);
+                for (byte m = 0; m < channelMethods.Length; m++)
+                {
+                    if (channelMethods[m].Length < length) continue;
+
+                    UInt64 cost = GetCompressedBitsForMethod(length, m, BitsPerChannel[c]);
+                    bool reached = lengthReached || (channelMethods[m].Length == length);
+                    if (!reached && (restMinDelta == UInt64.MaxValue)) continue;
+
+                    UInt64 total = prefixBits + cost + restBits + (reached ? 0 : restMinDelta);
+                    if (total == bits)
                     {
-                        UInt32 length = allMethods[c * stride + currentMethods[c]].Length;
-                        if (minLength > length) minLength = length;
-                    }
-
-                    // Calculate the efficiency and if it is better than previously found, then save this combination.
-                    double efficiency = GetBlockEfficiency(minLength, currentMethods);
-
-                    if (efficiency > bestBlock.Efficiency)
-                    {
-                        UInt32[] initialValues = new UInt32[ChannelsCount];
-                        for (byte c = 0; c < ChannelsCount; c++)
-                        {
-                            initialValues[c] = allMethods[c * stride + currentMethods[c]].InitialValue;
-                        }
-
-                        bestBlock.Methods = currentMethods.ToArray();
-                        bestBlock.InitialValues = initialValues;
-                        bestBlock.Length = minLength;
-                        bestBlock.Efficiency = efficiency;
+                        methods[c] = m;
+                        prefixBits += cost;
+                        lengthReached = reached;
+                        break;
                     }
                 }
             }
@@ -982,6 +1102,102 @@ namespace DeltaComp
             }
 
             return (length);
+        }
+
+
+        // The same as GetMaxBlockLength(), but for all Fixed Window methods (0 ~ bits per channel - 1) at once.
+        // The range (max - min) of the block only grows with the length, so a wider window always lasts
+        // at least as long as a narrower one, and one scan is enough to find where each window gets exceeded.
+        private void GetMaxBlockLengths(UInt32 position, byte channel, Span<UInt32> lengths, Span<UInt32> initialValues)
+        {
+            byte bitDepth = BitsPerChannel[channel];
+            ReadOnlySpan<UInt32> frames = _frames[channel];
+            UInt32 maxLength = (UInt32)Math.Min((UInt64)_maxBlockSize, (UInt64)TotalFrames - position);
+
+            UInt32 min = UInt32.MaxValue;
+            UInt32 max = 0;
+            byte method = 0; // the narrowest window that still fits all frames so far
+            UInt32 length = 0;
+
+            while (length < maxLength)
+            {
+                UInt32 currentFrame = frames[(int)(position + length)];
+                UInt32 newMin = (currentFrame < min) ? currentFrame : min;
+                UInt32 newMax = (currentFrame > max) ? currentFrame : max;
+                UInt32 range = newMax - newMin;
+
+                // All the windows that the new frame doesn't fit into end here
+                while ((method < bitDepth) && (range > ((1u << method) - 1)))
+                {
+                    lengths[method] = length;
+                    initialValues[method] = (length > 0) ? min : 0;
+                    method++;
+                }
+                if (method >= bitDepth) return;
+
+                min = newMin;
+                max = newMax;
+                length++;
+            }
+
+            // The remaining windows last until the end of the data or the maximum block size
+            for (; method < bitDepth; method++)
+            {
+                lengths[method] = length;
+                initialValues[method] = (length > 0) ? min : 0;
+            }
+        }
+
+
+        // The same as GetMaxBlockLength3(), but for all Adaptive Floating Window methods (1 ~ bits per channel - 1) at once.
+        // For the same previous frame, the window of width 2^(w+1) always contains the window of width 2^w
+        // (both are centered on the previous frame and clamped to the same range), and the previous frame
+        // is just the source data, so a wider window lasts at least as long and one scan is enough.
+        private void GetMaxBlockLengths3(UInt32 position, byte channel, Span<UInt32> lengths)
+        {
+            byte bitDepth = BitsPerChannel[channel];
+            ReadOnlySpan<UInt32> frames = _frames[channel];
+            UInt32 frameWidth = Pow2(bitDepth);
+            UInt32 maxLength = (UInt32)Math.Min((UInt64)_maxBlockSize, (UInt64)TotalFrames - position);
+
+            UInt32 lastFrame = frames[(int)position];
+            byte method = 1; // the narrowest window that still fits all frames so far
+            UInt32 length = 1;
+
+            while (length < maxLength)
+            {
+                UInt32 currentFrame = frames[(int)(position + length)];
+
+                // All the windows that the new frame doesn't fit into end here
+                while (method < bitDepth)
+                {
+                    UInt32 windowWidth = 1u << method;
+                    UInt32 halfWindowWidth = windowWidth >> 1;
+                    UInt32 maxFrameStart = frameWidth - windowWidth;
+                    UInt32 windowStart;
+                    if (halfWindowWidth < lastFrame)
+                    {
+                        windowStart = lastFrame - halfWindowWidth;
+                        if (windowStart > maxFrameStart) windowStart = maxFrameStart;
+                    }
+                    else
+                    {
+                        windowStart = 0;
+                    }
+
+                    if ((currentFrame >= windowStart) && ((currentFrame - windowStart) < windowWidth)) break;
+
+                    lengths[method] = length;
+                    method++;
+                }
+                if (method >= bitDepth) return;
+
+                lastFrame = currentFrame;
+                length++;
+            }
+
+            // The remaining windows last until the end of the data or the maximum block size
+            for (; method < bitDepth; method++) lengths[method] = length;
         }
 
 
