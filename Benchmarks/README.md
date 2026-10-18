@@ -26,12 +26,23 @@ Benchmarks/Decoder/build.sh
 dotnet run -c Release --project Benchmarks/DeltaComp.Bench -- --decoder Benchmarks/Decoder/bin
 ```
 
-Other options: `--filter logo,text`, `--repeat 3`, `--csv results.csv`,
-`--update-baseline` (only together with `--engine reference` or `both`).
-The exit code is 1 if any output differs from the baseline or fails to decode.
+Other options: `--filter logo,text`, `--repeat 3`, `--csv results.csv`.
+
+By default the benchmark runs the **frame-by-frame** chain builder (the sprint 2 algorithm) and
+compares it with `baseline.json`, produced by the frozen reference. The compressor's default,
+the **optimal chain**, is checked with `--optimal` against `baseline-optimal.json`
+(the size change against the frame-by-frame result is shown next to it).
+
+- `--optimal --update-baseline` rewrites `baseline-optimal.json` (do it only when the optimal
+  chain output is meant to change).
+- `--engine reference --update-baseline` rewrites `baseline.json` from the frozen reference.
+- `--auto` runs the automatic selection of block size field, delta option and square size
+  (the "Auto" setting in the app) and reports the chosen settings.
+
+The exit code is 1 if any output differs from its baseline or fails to decode.
 
 ## Test cases
 
 Defined in `DeltaComp.Bench/BenchCase.cs`. Settings follow the sprint experiments:
 grayscale 8-bit, text as 8-bit data, RGB565 and RGB888, with and without 2×2 squares,
-all four delta options, brute-force and fast block search. Sources are in `TestData/`.
+all four delta options. Sources are in `TestData/`.

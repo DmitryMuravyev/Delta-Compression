@@ -19,7 +19,6 @@ namespace DeltaComp.Bench
         byte BlockSizeBits,
         byte SquareWidth = 1,
         DeltaOption Delta = DeltaOption.FixedWindowFirst,
-        bool BruteForce = true,
         bool Slow = false)
     {
         // The default suite. Settings follow the sprint 1-3 experiments (see Materials/*.pdf).
@@ -38,7 +37,6 @@ namespace DeltaComp.Bench
 
             // RGB 565
             new("logo-565-2x2",       "Logo_240_Color.png",                       SourceKind.Rgb, [5, 6, 5], 9, 2),
-            new("logo-565-2x2-fast",  "Logo_240_Color.png",                       SourceKind.Rgb, [5, 6, 5], 9, 2, BruteForce: false),
             new("logo-565-fw-only",   "Logo_240_Color.png",                       SourceKind.Rgb, [5, 6, 5], 9, 2, DeltaOption.FixedWindowOnly),
             new("logo-565-afw-only",  "Logo_240_Color.png",                       SourceKind.Rgb, [5, 6, 5], 8, 2, DeltaOption.AdaptiveFloatingWindowOnly),
             new("gradient-565-2x2",   "Color_Gradient_240.png",                   SourceKind.Rgb, [5, 6, 5], 8, 2),
@@ -48,9 +46,7 @@ namespace DeltaComp.Bench
 
             // RGB 888
             new("logo-888",           "Logo_240_Color.png",                       SourceKind.Rgb, [8, 8, 8], 8, Slow: true),
-            new("logo-888-fast",      "Logo_240_Color.png",                       SourceKind.Rgb, [8, 8, 8], 8, BruteForce: false),
             new("icons-888",          "Icons.png",                                SourceKind.Rgb, [8, 8, 8], 7, Slow: true),
-            new("nebula-888-fast",    "Nebula.png",                               SourceKind.Rgb, [8, 8, 8], 5, BruteForce: false),
         ];
     }
 

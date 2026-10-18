@@ -19,11 +19,6 @@
     "Sha256": "21bc54002d1eee20d19559604b6c47cb1012002f732e0eb28b052f4b0996e66d",
     "Efficiency": 86.51
   },
-  "logo-565-2x2-fast": {
-    "Bytes": 15684,
-    "Sha256": "a3ebd3fbaca1ee6fe0331331716bbdc400cb9eb157f8b0020aecb85675e80e68",
-    "Efficiency": 86.39
-  },
   "logo-565-afw-only": {
     "Bytes": 15183,
     "Sha256": "471d2f4424e16f4ceb767d5b5fbd65a08200d5ba3e43c8a71865af8f21fff38c",
@@ -38,11 +33,6 @@
     "Bytes": 26734,
     "Sha256": "9c4d25bb18c529c19cedf8a1b9293e46647983538cf27e24226a366ac2070bf0",
     "Efficiency": 84.53
-  },
-  "logo-888-fast": {
-    "Bytes": 29617,
-    "Sha256": "fddae2fd88a073e3dc75999a971b6d036e82d6dbbf106cce32adbfffd263c23d",
-    "Efficiency": 82.86
   },
   "logo-gray": {
     "Bytes": 12678,
@@ -68,11 +58,6 @@
     "Bytes": 62974,
     "Sha256": "0f4cf779de73717686edc20b6b9decd17992d0970ab02c906ea90f90e3d04a42",
     "Efficiency": 45.34
-  },
-  "nebula-888-fast": {
-    "Bytes": 128461,
-    "Sha256": "499413a19ee83ee0d30937ef9243bcfa8fbd0ab8ffee6692a54f802262527dde",
-    "Efficiency": 25.66
   },
   "noise-gray": {
     "Bytes": 50233,

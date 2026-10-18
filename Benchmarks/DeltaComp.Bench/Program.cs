@@ -18,7 +18,7 @@ using DeltaComp.Bench;
 //   --update-baseline   write the output sizes and hashes of the reference engine to Benchmarks/baseline.json
 //   --csv FILE          also write the results as CSV
 //   --optimal           build the optimal chain of blocks (output differs: compared with the baseline by size)
-//   --sweep             with --optimal: find the best block size field (and square size for images) per case
+//   --auto              choose the block size field, delta option and square size automatically and compare with the baseline
 //
 // Exit code is 1 if any output differs from the baseline or a round trip fails.
 
@@ -26,7 +26,7 @@ CultureInfo.DefaultThreadCurrentCulture = CultureInfo.InvariantCulture;
 CultureInfo.CurrentCulture = CultureInfo.InvariantCulture;
 
 string[] filters = [];
-bool quick = false, updateBaseline = false, sweep = false;
+bool quick = false, updateBaseline = false, auto = false, failed = false;
 string engineArg = "current";
 int repeat = 1;
 string? decoderDir = null, csvPath = null;
@@ -43,7 +43,7 @@ for (int i = 0; i < args.Length; i++)
         case "--update-baseline": updateBaseline = true; break;
         case "--csv": csvPath = args[++i]; break;
         case "--optimal": Runner.OptimalChain = true; break;
-        case "--sweep": sweep = true; break;
+        case "--auto": auto = true; break;
         default: Console.Error.WriteLine($"Unknown option: {args[i]}"); return 2;
     }
 }
@@ -55,15 +55,21 @@ Engine[] engines = engineArg switch
     "both" => [Engine.Reference, Engine.Current],
     _ => throw new ArgumentException($"Unknown engine: {engineArg}")
 };
-if (updateBaseline && !engines.Contains(Engine.Reference))
+if (updateBaseline && !Runner.OptimalChain && !engines.Contains(Engine.Reference))
 {
-    Console.Error.WriteLine("--update-baseline needs --engine reference or both: the baseline always comes from the frozen reference.");
+    Console.Error.WriteLine("--update-baseline needs --engine reference or both (or --optimal): the frame-by-frame baseline always comes from the frozen reference.");
     return 2;
 }
 
 string benchDir = FindBenchmarksDir();
 string dataDir = Path.Combine(benchDir, "TestData");
+// baseline.json: frame-by-frame analysis, produced by the frozen reference.
+// baseline-optimal.json: the optimal chain (the compressor's default), produced by the current engine.
 string baselinePath = Path.Combine(benchDir, "baseline.json");
+string optimalBaselinePath = Path.Combine(benchDir, "baseline-optimal.json");
+var optimalBaseline = File.Exists(optimalBaselinePath)
+    ? JsonSerializer.Deserialize<Dictionary<string, BaselineEntry>>(File.ReadAllText(optimalBaselinePath))!
+    : new Dictionary<string, BaselineEntry>();
 var baseline = File.Exists(baselinePath)
     ? JsonSerializer.Deserialize<Dictionary<string, BaselineEntry>>(File.ReadAllText(baselinePath))!
     : new Dictionary<string, BaselineEntry>();
@@ -73,41 +79,48 @@ var cases = BenchCase.All
     .Where(c => !quick || !c.Slow)
     .ToList();
 
-if (sweep)
+if (auto)
 {
-    if (!Runner.OptimalChain) { Console.Error.WriteLine("--sweep needs --optimal"); return 2; }
-    Console.WriteLine($"{"case",-22} {"baseline",9} {"same settings",14} {"best",9} {"vs baseline",12}  best settings");
-    foreach (BenchCase c in cases.Where(c => c.BruteForce))
+    // Automatic selection of the block size field, delta option and square size (as the "Auto" setting in the app)
+    Console.WriteLine($"{"case",-22} {"baseline",9} {"auto",9} {"vs baseline",12} {"time ms",9}  chosen settings");
+    foreach (BenchCase c in cases)
     {
         LoadedSource source = LoadedSource.Load(c, dataDir);
-        int sameSettings = Runner.Run(c, source, Engine.Current).Output.Length;
-        (int bytes, byte bits, byte square) bestFound = (int.MaxValue, 0, 0);
-        byte[] squares = source.IsImage ? [1, 2, 3, 4] : [1];
-        foreach (byte square in squares)
-        {
-            if (source.IsImage && ((source.Width % square != 0) || (source.Height % square != 0))) continue;
-            for (byte bits = 1; bits <= 16; bits++)
-            {
-                int bytes = Runner.Run(c with { BlockSizeBits = bits, SquareWidth = square }, source, Engine.Current).Output.Length;
-                if (bytes < bestFound.bytes) bestFound = (bytes, bits, square);
-            }
-        }
+        var watch = Stopwatch.StartNew();
+        Compressor compressor = source.IsImage
+            ? new Compressor(source.Channels, (ushort)source.Width, (ushort)source.Height, true, _ => { }, (_, _) => { })
+            : new Compressor(source.Channels, source.TotalFrames, true, _ => { }, (_, _) => { });
+        var settings = compressor.AutoSelectSettings(
+            Enumerable.Range(2, 15).Select(b => (byte)b).ToList(),
+            Enum.GetValues<DeltaOption>(),
+            Enumerable.Range(1, 16).Select(w => (byte)w).ToList(), null);
+        double searchMs = watch.Elapsed.TotalMilliseconds;
+
+        // Compress with the chosen settings and check that the size matches the estimate
+        var output = new List<byte>();
+        compressor = source.IsImage
+            ? new Compressor(source.Channels, (ushort)source.Width, (ushort)source.Height, true, output.Add, (_, _) => { })
+            : new Compressor(source.Channels, source.TotalFrames, true, output.Add, (_, _) => { });
+        if (source.IsImage) { compressor.SplitToSquares = settings.WidthOfSquare > 1; compressor.WidthOfSquare = settings.WidthOfSquare; }
+        compressor.BlockSizeBits = settings.BlockSizeBits;
+        compressor.DeltaCalculationOption = settings.DeltaCalculationOption;
+        compressor.Compress(null);
+        if (output.Count != (int)((settings.CompressedBits + 7) / 8)) { Console.Error.WriteLine($"{c.Name}: estimated {settings.CompressedBits} bits, got {output.Count} bytes"); failed = true; }
+
         int baselineBytes = baseline.TryGetValue(c.Name, out BaselineEntry? e) ? e.Bytes : 0;
-        Console.WriteLine($"{c.Name,-22} {baselineBytes,9} {sameSettings,14} {bestFound.bytes,9} " +
-                          $"{(bestFound.bytes - baselineBytes) * 100.0 / baselineBytes,11:+0.00;-0.00;0.00}%  " +
-                          $"block bits {bestFound.bits}, squares {bestFound.square}x{bestFound.square} (was {c.BlockSizeBits}, {c.SquareWidth}x{c.SquareWidth})");
+        Console.WriteLine($"{c.Name,-22} {baselineBytes,9} {output.Count,9} {(output.Count - baselineBytes) * 100.0 / baselineBytes,11:+0.00;-0.00;0.00}% {searchMs,9:F0}  " +
+                          $"block bits {settings.BlockSizeBits}, {settings.DeltaCalculationOption}, squares {settings.WidthOfSquare}x{settings.WidthOfSquare}");
     }
-    return 0;
+    return failed ? 1 : 0;
 }
 
 Console.WriteLine($"DeltaComp benchmark: {cases.Count} case(s), engines: {string.Join(", ", engines)}, " +
                   $"repeat: {repeat}, CPUs: {Environment.ProcessorCount}, .NET {Environment.Version}");
 Console.WriteLine();
-Console.WriteLine($"{"case",-22} {"engine",-9} {"bytes",8} {"eff %",7} {"time ms",9} {"alloc MB",9}  {"sha256",-12} {"baseline",-8} {"decode",-6}");
+Console.WriteLine($"{"case",-22} {"engine",-9} {"bytes",8} {"eff %",7} {"time ms",9} {"alloc MB",9}  {"sha256",-12} {"baseline",-16} {"decode",-6}");
 Console.WriteLine(new string('-', 100));
 
 var csv = new StringBuilder("case,engine,bytes,efficiency,time_ms,alloc_mb,sha256,baseline,decode\n");
-bool failed = false;
 
 foreach (BenchCase c in cases)
 {
@@ -128,18 +141,16 @@ foreach (BenchCase c in cases)
         RunResult res = best!;
 
         string baselineStatus = "-";
-        if (baseline.TryGetValue(c.Name, out BaselineEntry? entry))
+        bool optimal = Runner.OptimalChain && (engine == Engine.Current);
+        if ((optimal ? optimalBaseline : baseline).TryGetValue(c.Name, out BaselineEntry? entry))
         {
-            if (Runner.OptimalChain && (engine == Engine.Current))
-            {
-                // The output is expected to differ, so report the size change instead
-                baselineStatus = $"{(res.Output.Length - entry.Bytes) * 100.0 / entry.Bytes:+0.00;-0.00;0.00}%";
-            }
-            else
-            {
-                baselineStatus = entry.Sha256 == res.Sha256 ? "same" : "DIFF";
-                if (baselineStatus == "DIFF") failed = true;
-            }
+            baselineStatus = entry.Sha256 == res.Sha256 ? "same" : "DIFF";
+            if (baselineStatus == "DIFF") failed = true;
+        }
+        if (optimal && baseline.TryGetValue(c.Name, out BaselineEntry? legacy))
+        {
+            // Size change against the frame-by-frame analysis
+            baselineStatus += $" {(res.Output.Length - legacy.Bytes) * 100.0 / legacy.Bytes:+0.00;-0.00;0.00}%";
         }
 
         string decodeStatus = "-";
@@ -149,13 +160,17 @@ foreach (BenchCase c in cases)
             if (decodeStatus == "FAIL") failed = true;
         }
 
-        if (updateBaseline && engine == Engine.Reference)
+        if (updateBaseline && (engine == Engine.Reference) && !Runner.OptimalChain)
         {
             baseline[c.Name] = new BaselineEntry(res.Output.Length, res.Sha256, Math.Round(res.Efficiency * 100, 2));
         }
+        if (updateBaseline && optimal)
+        {
+            optimalBaseline[c.Name] = new BaselineEntry(res.Output.Length, res.Sha256, Math.Round(res.Efficiency * 100, 2));
+        }
 
         Console.WriteLine($"{c.Name,-22} {engine,-9} {res.Output.Length,8} {res.Efficiency * 100,7:F2} {res.Milliseconds,9:F0} " +
-                          $"{res.AllocatedBytes / 1048576.0,9:F1}  {res.Sha256[..12],-12} {baselineStatus,-8} {decodeStatus,-6}");
+                          $"{res.AllocatedBytes / 1048576.0,9:F1}  {res.Sha256[..12],-12} {baselineStatus,-16} {decodeStatus,-6}");
         csv.AppendLine($"{c.Name},{engine},{res.Output.Length},{res.Efficiency * 100:F2},{res.Milliseconds:F1}," +
                        $"{res.AllocatedBytes / 1048576.0:F1},{res.Sha256},{baselineStatus},{decodeStatus}");
     }
@@ -163,9 +178,10 @@ foreach (BenchCase c in cases)
 
 if (updateBaseline)
 {
-    var sorted = baseline.OrderBy(kv => kv.Key, StringComparer.Ordinal).ToDictionary(kv => kv.Key, kv => kv.Value);
-    File.WriteAllText(baselinePath, JsonSerializer.Serialize(sorted, new JsonSerializerOptions { WriteIndented = true }) + "\n");
-    Console.WriteLine($"\nBaseline written to {baselinePath}");
+    var (target, path) = Runner.OptimalChain ? (optimalBaseline, optimalBaselinePath) : (baseline, baselinePath);
+    var sorted = target.OrderBy(kv => kv.Key, StringComparer.Ordinal).ToDictionary(kv => kv.Key, kv => kv.Value);
+    File.WriteAllText(path, JsonSerializer.Serialize(sorted, new JsonSerializerOptions { WriteIndented = true }) + "\n");
+    Console.WriteLine($"\nBaseline written to {path}");
 }
 if (csvPath != null) File.WriteAllText(csvPath, csv.ToString());
 

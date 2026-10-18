@@ -122,10 +122,10 @@
                 <ComboBoxItem Content="Both options, Adaptive first"/>
             </ComboBox>
 
-            <Label Content="Block search:" HorizontalAlignment="Left" Margin="350,0,0,0" VerticalAlignment="Top"/>
-            <ComboBox Name="BlockSearchOptionComboBox" HorizontalAlignment="Left" Margin="350,0,0,26" VerticalAlignment="Bottom" Width="100" SelectedIndex="0">
-                <ComboBoxItem Content="Fast"/>
-                <ComboBoxItem Content="Brute force"/>
+            <Label Content="Settings:" HorizontalAlignment="Left" Margin="350,0,0,0" VerticalAlignment="Top"/>
+            <ComboBox Name="SettingsModeComboBox" HorizontalAlignment="Left" Margin="350,0,0,26" VerticalAlignment="Bottom" Width="100" SelectedIndex="1" ToolTip="Auto: try the block sizes, delta options and squares and keep the smallest result">
+                <ComboBoxItem Content="Manual"/>
+                <ComboBoxItem Content="Auto"/>
             </ComboBox>
 
             <Label Content=".h platform:" HorizontalAlignment="Left" Margin="470,0,0,0" VerticalAlignment="Top"/>

@@ -1,0 +1,82 @@
+{
+  "gradient-565-2x2": {
+    "Bytes": 17341,
+    "Sha256": "0e99ca130dc05f11856dd8ac000654b67e247ce570bbca1509837660e3be0874",
+    "Efficiency": 84.95
+  },
+  "gradient-gray": {
+    "Bytes": 16157,
+    "Sha256": "b0cddc93f113b0a1f644c5b0a1f8eaca3b3cfeb2a505ab3b06c322000b713574",
+    "Efficiency": 71.95
+  },
+  "icons-888": {
+    "Bytes": 27924,
+    "Sha256": "f5ffb154d066fba2f94503d2d6eefd6bfe9eba0ef9dbb4a36a7077fd00ac2253",
+    "Efficiency": 83.84
+  },
+  "logo-565-2x2": {
+    "Bytes": 15220,
+    "Sha256": "e3f94512c40cec59ca269685b13acc59a9923ac8fc66db93148546e1feb3a061",
+    "Efficiency": 86.79
+  },
+  "logo-565-afw-only": {
+    "Bytes": 14787,
+    "Sha256": "2e1fb22d9f1d189d8c4f20d5881be7bb02735e36ed5d49bf4947589cecb2ce42",
+    "Efficiency": 87.16
+  },
+  "logo-565-fw-only": {
+    "Bytes": 14653,
+    "Sha256": "798ac6827ff4fc0b956898d3c65dc2e4a21f22401edbaaa3dc47a73bb653bfbb",
+    "Efficiency": 87.28
+  },
+  "logo-888": {
+    "Bytes": 26090,
+    "Sha256": "c272aeebdca9114f987d87daf8ab582a55d8a324f540af3b5f82fe8b6653c091",
+    "Efficiency": 84.9
+  },
+  "logo-gray": {
+    "Bytes": 12206,
+    "Sha256": "22e1fb35dede99f447292984357038ab8dc672ef317da6c7ee7da07dda5843c6",
+    "Efficiency": 78.81
+  },
+  "logo-gray-2x2": {
+    "Bytes": 10332,
+    "Sha256": "7aaf38634ab4288f298dc42340d7aaf53f25a74b12742d4c0d077967da018941",
+    "Efficiency": 82.06
+  },
+  "mattress-gray": {
+    "Bytes": 22735,
+    "Sha256": "a227879150cff7446a87b934b5c387e4531ae5b3c8560cc3618c166122092624",
+    "Efficiency": 60.53
+  },
+  "mit-text": {
+    "Bytes": 28430,
+    "Sha256": "d8b949461d38b6b997c52d53cbbe0a2b1d35450a2c3718eec06984f6e59e8f8c",
+    "Efficiency": 13.24
+  },
+  "nebula-565-2x2": {
+    "Bytes": 60676,
+    "Sha256": "44b8f6567e3ee7d844871367f7ec7b7704df04b37a05894df463182194805052",
+    "Efficiency": 47.33
+  },
+  "noise-gray": {
+    "Bytes": 50188,
+    "Sha256": "7cd4f03a178d951d120df4b1e37d781e9206edd51b8f8bfef6e5e860fcaf6b2d",
+    "Efficiency": 12.87
+  },
+  "parrot-565-2x2": {
+    "Bytes": 40095,
+    "Sha256": "dcd2b767f36f616dbcd472dd6175fe84531cdaaaf5642c73c34eb4b91e484a68",
+    "Efficiency": 33.17
+  },
+  "parrot-565-afw-first": {
+    "Bytes": 41674,
+    "Sha256": "d376a62729e83b3dbd2e0cbc8015fcdfe0fc6f2cfbe5c8d69039827da28b666c",
+    "Efficiency": 30.54
+  },
+  "parrot-gray-2x2": {
+    "Bytes": 23037,
+    "Sha256": "fe53053bdf96ebd0fe9d68a4ea772f03d777cb2dc82162ca6afcd29ae8d06e05",
+    "Efficiency": 23.21
+  }
+}

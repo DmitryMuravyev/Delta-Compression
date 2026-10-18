@@ -110,6 +110,7 @@ namespace DeltaComp
             public const double MinProgressIcrease = 0.1d;
             public const int MaxStackallocMethods = 256;
             public const int MaxBitsPerChannel = 32;
+            public const int AutoSearchGrowingSteps = 3;
         }
 
 
@@ -216,11 +217,9 @@ namespace DeltaComp
             }
         }
 
-        public bool UseBruteForceBestBlockSearch = true;
-
-        // Build the chain of blocks with the minimum total size (dynamic programming) instead of
-        // the frame-by-frame efficiency analysis. The output format is the same.
-        public bool UseOptimalBlockChain = false;
+        // Build the chain of blocks with the minimum total size (dynamic programming).
+        // If false, the frame-by-frame efficiency analysis (sprint 2) is used. The output format is the same.
+        public bool UseOptimalBlockChain = true;
         public bool SplitToSquares = false;
         public byte WidthOfSquare
         {
@@ -260,13 +259,8 @@ namespace DeltaComp
 
             TotalFrames = (UInt32)(ImageWidth * ImageHeight);
 
-            if (multithreadedRead)
-            {
-                _bestBlocksArrayUsed = true;
-                _bestBlocks = new DistributedBlock[TotalFrames];
-                for(UInt32 i = 0; i < TotalFrames; i++) _bestBlocks[i].Ready = false;
-                _bestBlocksBufferEWH = new EventWaitHandle(false, EventResetMode.AutoReset);
-            }
+            // The best blocks buffer is allocated when (and if) the frame-by-frame analysis runs
+            _bestBlocksArrayUsed = multithreadedRead;
             
             BlockSizeBits = Constants.DefaultBlockSizeBits;
 
@@ -285,13 +279,8 @@ namespace DeltaComp
 
             TotalFrames = totalFrames;
             
-            if (multithreadedRead)
-            {
-                _bestBlocksArrayUsed = true;
-                _bestBlocks = new DistributedBlock[TotalFrames];
-                for (UInt32 i = 0; i < TotalFrames; i++) _bestBlocks[i].Ready = false;
-                _bestBlocksBufferEWH = new EventWaitHandle(false, EventResetMode.AutoReset);
-            }
+            // The best blocks buffer is allocated when (and if) the frame-by-frame analysis runs
+            _bestBlocksArrayUsed = multithreadedRead;
             
             BlockSizeBits = Constants.DefaultBlockSizeBits;
 
@@ -321,6 +310,128 @@ namespace DeltaComp
         }
 
 
+        // Compression settings chosen by AutoSelectSettings()
+        public sealed record AutoSettings(byte BlockSizeBits, DeltaOption DeltaCalculationOption, byte WidthOfSquare, UInt64 CompressedBits);
+
+
+        // Try the combinations of the given settings and apply the one that gives the smallest output
+        // (with the optimal chain of blocks). Squares widths are ignored for non-image data; 1 means no squares.
+        // All combinations of square sizes and delta options are tried (they interact strongly, so choosing
+        // them one after another gives noticeably worse results), each with its own block size search.
+        // The block size search stops early once the size has grown a few times in a row
+        // (the size as a function of the block size field has a single minimum in practice).
+        public AutoSettings AutoSelectSettings(IReadOnlyList<byte> blockSizeBitsOptions, IReadOnlyList<DeltaOption> deltaOptions,
+            IReadOnlyList<byte> squareWidths, CancellationToken? token)
+        {
+            _cancellationToken = token;
+            UpdateStatus(CompressionStage.Preparation, 0);
+
+            // Read the source data once (in the linear order)
+            bool splitToSquares = SplitToSquares;
+            SplitToSquares = false;
+            PrepareFrames();
+            SplitToSquares = splitToSquares;
+            UInt32[][] linearFrames = _frames;
+
+            bool isImage = (ImageWidth > 0) && (ImageHeight > 0);
+            var squares = isImage ? squareWidths.Where(w => (w > 0) && (ImageWidth % w == 0) && (ImageHeight % w == 0)).Distinct().ToList() : [];
+            if (squares.Count == 0) squares.Add(1);
+            var bitsOptions = blockSizeBitsOptions.OrderBy(b => b).ToList();
+            int trialsDone = 0;
+            object progressLock = new object();
+            var trials = (from square in squares from delta in deltaOptions select (square, delta)).ToList();
+            var results = RunAutoTrials(trials, linearFrames, bitsOptions, token, () =>
+            {
+                lock (progressLock) UpdateStatus(CompressionStage.Preparation, (UInt32)((UInt64)TotalFrames * (UInt64)(++trialsDone) / (UInt64)trials.Count));
+            });
+
+            // The smallest result (the first one in the order of the trials in case of a tie)
+            int best = 0;
+            for (int t = 1; t < trials.Count; t++) if (results[t].bits < results[best].bits) best = t;
+
+            byte bestSquare = trials[best].square;
+            if (isImage)
+            {
+                SplitToSquares = bestSquare > 1;
+                WidthOfSquare = bestSquare;
+            }
+            DeltaCalculationOption = trials[best].delta;
+            BlockSizeBits = results[best].blockSizeBits;
+            _frames = null!;
+
+            return (new AutoSettings(BlockSizeBits, DeltaCalculationOption, bestSquare, results[best].bits));
+        }
+
+
+        // Run the given trials (in parallel) and return the smallest size and its block size field for each
+        private (UInt64 bits, byte blockSizeBits)[] RunAutoTrials(List<(byte square, DeltaOption delta)> trials,
+            UInt32[][] linearFrames, List<byte> bitsOptions, CancellationToken? token, Action trialDone)
+        {
+            var results = new (UInt64 bits, byte blockSizeBits)[trials.Count];
+
+            try
+            {
+                Parallel.For(0, trials.Count, t =>
+                {
+                    var (square, delta) = trials[t];
+                    Compressor trial = CreateTrial(linearFrames, square, delta, token);
+
+                    UInt64 minBits = UInt64.MaxValue;
+                    byte minBlockSizeBits = 0;
+                    int growing = 0;
+                    foreach (byte blockSizeBits in bitsOptions)
+                    {
+                        trial.BlockSizeBits = blockSizeBits;
+                        UInt64 bits = trial.FindOptimalChain(null, false);
+                        if (bits < minBits)
+                        {
+                            minBits = bits;
+                            minBlockSizeBits = blockSizeBits;
+                            growing = 0;
+                        }
+                        else if (++growing >= Constants.AutoSearchGrowingSteps) break;
+                    }
+                    results[t] = (minBits, minBlockSizeBits);
+                    trialDone();
+                });
+            }
+            catch (AggregateException ex) when (ex.InnerExceptions.All(e => e is OperationCanceledException))
+            {
+                throw ex.InnerExceptions[0];
+            }
+
+            return (results);
+        }
+
+
+        // A lightweight copy of this compressor for one combination of settings in AutoSelectSettings()
+        private Compressor CreateTrial(UInt32[][] linearFrames, byte square, DeltaOption delta, CancellationToken? token)
+        {
+            Compressor trial = (ImageWidth > 0)
+                ? new Compressor(_sourceChannels, ImageWidth, ImageHeight, false, _ => { }, null!)
+                : new Compressor(_sourceChannels, TotalFrames, false, _ => { }, null!);
+            trial._cancellationToken = token;
+            trial.DeltaCalculationOption = delta;
+            trial.SplitToSquares = square > 1;
+            if (ImageWidth > 0) trial.WidthOfSquare = square;
+
+            trial._methodsCount = new byte[ChannelsCount];
+            trial._frames = new UInt32[ChannelsCount][];
+            for (byte c = 0; c < ChannelsCount; c++)
+            {
+                trial._methodsCount[c] = trial.GetMethodsCount(c);
+                if (!trial.SplitToSquares)
+                {
+                    trial._frames[c] = linearFrames[c];
+                    continue;
+                }
+                trial._frames[c] = new UInt32[TotalFrames];
+                for (UInt32 f = 0; f < TotalFrames; f++) trial._frames[c][f] = linearFrames[c][trial.GetPixelForSquares(f)];
+            }
+            return (trial);
+        }
+
+
         // Since, in order to improve performance, we do not control
         // read/write errors from the compression class, so external
         // modules should be responsible for this,
@@ -344,7 +455,7 @@ namespace DeltaComp
 
             Debug.WriteLine("BlockSizeBits: " + BlockSizeBits.ToString());
             Debug.WriteLine("DeltaOption: " + DeltaCalculationOption.ToString());
-            Debug.WriteLine("UseBruteForceBestBlockSearch: " + UseBruteForceBestBlockSearch.ToString());
+            Debug.WriteLine("UseOptimalBlockChain: " + UseOptimalBlockChain.ToString());
             Debug.WriteLine("SplitToSquares: " + SplitToSquares.ToString());
             Debug.WriteLine("WidthOfSquare: " + WidthOfSquare.ToString());
             Debug.WriteLine("Header bits: {0}", _headerBits);
@@ -367,6 +478,9 @@ namespace DeltaComp
             // Multithreaded search for the best blocks
             if (_bestBlocksArrayUsed && !UseOptimalBlockChain)
             {
+                _bestBlocks = new DistributedBlock[TotalFrames];
+                _bestBlocksBufferEWH = new EventWaitHandle(false, EventResetMode.AutoReset);
+
                 // We could use Parallel.For for this purpose...
 
                 /*
@@ -721,8 +835,46 @@ namespace DeltaComp
         // alone is not smaller than the best total found so far.
         private List<Block> BuildOptimalBlocks()
         {
-            UInt64[] best = new UInt64[TotalFrames + 1];
             UInt32[] bestLength = new UInt32[TotalFrames];
+            FindOptimalChain(bestLength, true);
+            var lengths = new ChannelMethodLengths(this);
+
+            // Restore the chain
+            var chain = new List<Block>();
+            for (UInt32 position = 0; position < TotalFrames; position += bestLength[position])
+            {
+                UInt32 length = bestLength[position];
+                lengths.Calculate(position);
+                lengths.ResetCursors();
+
+                Block block = new Block()
+                {
+                    StartFrame = position,
+                    Length = length,
+                    Methods = new byte[ChannelsCount],
+                    InitialValues = new UInt32[ChannelsCount]
+                };
+                for (byte c = 0; c < ChannelsCount; c++)
+                {
+                    lengths.GetMinCost(c, length, out byte method);
+                    block.Methods[c] = method;
+                    block.InitialValues[c] = lengths.GetInitialValue(c, method);
+                }
+                block.Efficiency = GetBlockEfficiency(length, block.Methods);
+                chain.Add(block);
+            }
+
+            return (chain);
+        }
+
+
+        // The dynamic programming pass of BuildOptimalBlocks(): returns the minimum total size of the
+        // compressed data in bits and (optionally) the length of the first block of the optimal chain
+        // for every position.
+        private UInt64 FindOptimalChain(UInt32[]? bestLength, bool reportProgress)
+        {
+            if (_frames == null) PrepareFrames();
+            UInt64[] best = new UInt64[TotalFrames + 1];
             var lengths = new ChannelMethodLengths(this);
 
             for (Int64 p = (Int64)TotalFrames - 1; p >= 0; p--)
@@ -730,7 +882,7 @@ namespace DeltaComp
                 if ((p & 0xFFF) == 0)
                 {
                     CheckCompressionCanceled();
-                    UpdateStatus(CompressionStage.Analysis, (UInt32)(TotalFrames - p));
+                    if (reportProgress) UpdateStatus(CompressionStage.Analysis, (UInt32)(TotalFrames - p));
                 }
 
                 UInt32 position = (UInt32)p;
@@ -773,35 +925,10 @@ namespace DeltaComp
                 }
 
                 best[position] = bestBits;
-                bestLength[position] = bestBlockLength;
+                if (bestLength != null) bestLength[position] = bestBlockLength;
             }
 
-            // Restore the chain
-            var chain = new List<Block>();
-            for (UInt32 position = 0; position < TotalFrames; position += bestLength[position])
-            {
-                UInt32 length = bestLength[position];
-                lengths.Calculate(position);
-                lengths.ResetCursors();
-
-                Block block = new Block()
-                {
-                    StartFrame = position,
-                    Length = length,
-                    Methods = new byte[ChannelsCount],
-                    InitialValues = new UInt32[ChannelsCount]
-                };
-                for (byte c = 0; c < ChannelsCount; c++)
-                {
-                    lengths.GetMinCost(c, length, out byte method);
-                    block.Methods[c] = method;
-                    block.InitialValues[c] = lengths.GetInitialValue(c, method);
-                }
-                block.Efficiency = GetBlockEfficiency(length, block.Methods);
-                chain.Add(block);
-            }
-
-            return (chain);
+            return (best[0]);
         }
 
 
@@ -1126,91 +1253,12 @@ namespace DeltaComp
         }
 
 
-        // Choosing one of two algorithms for searching the best block
+        // Search for the best block (the former "Fast" search is gone: the exact search is now as quick)
         private Block GetBestBlock(UInt32 position, UInt32 boundary)
         {
-            if (UseBruteForceBestBlockSearch)
-            {
-                return (GetBestBlockBruteForce(position, boundary));
-            }
-
-            return (GetBestBlockFast(position, boundary));
+            return (GetBestBlockBruteForce(position, boundary));
         }
 
-
-        // This one selects channels one by one, finds the most effective method for selected channel, 
-        // and for the other channels finds the most effective methods of exactly the same length 
-        // as the best method for the selected channel.
-        // In total, we get the number of blocks (with different combinations of methods per block)
-        // equal to the number of channels, from which the best one is selected.
-        // This algorithm is relatively fast and gives good results.
-        private Block GetBestBlockFast(UInt32 position, UInt32 boundary)
-        {
-            Block bestBlock = new Block();
-            bestBlock.StartFrame = position;
-            bestBlock.Efficiency = double.MinValue;
-
-            // All temporary buffers live on the stack, a new Block's arrays are allocated
-            // only when a more efficient combination is found.
-            Span<byte> bestMethods = stackalloc byte[ChannelsCount];
-            Span<UInt32> bestInitialValues = stackalloc UInt32[ChannelsCount];
-            Span<UInt32> bestLengths = stackalloc UInt32[ChannelsCount];
-            Span<byte> currentMethods = stackalloc byte[ChannelsCount];
-            Span<UInt32> currentInitialValues = stackalloc UInt32[ChannelsCount];
-
-            // It is better to find the most effective methods in advance.
-            // This will allow, in some cases, not to search,
-            // but to reuse these methods for other channels and improve performance.
-            Method bestMethod;
-            for (byte c = 0; c < ChannelsCount; c++)
-            {
-                bestMethod = GetBestMethod(position, c, boundary, false);
-                bestMethods[c] = bestMethod.Index;
-                bestInitialValues[c] = bestMethod.InitialValue;
-                bestLengths[c] = bestMethod.Length;
-            }
-
-            // Go through the channels
-            for (byte c = 0; c < ChannelsCount; c++)
-            {
-                UInt32 currentLength = bestLengths[c];
-
-                currentMethods[c] = bestMethods[c];
-                currentInitialValues[c] = bestInitialValues[c];
-
-                for (byte cc = 0; cc < ChannelsCount; cc++)
-                {
-                    if (cc != c)
-                    {
-                        // And find the best methods for all channels except the current one
-                        if (bestLengths[cc] != currentLength)
-                        {
-                            Method currentMethod = GetBestMethod(position, cc, position + currentLength, true);
-                            currentMethods[cc] = currentMethod.Index;
-                            currentInitialValues[cc] = currentMethod.InitialValue;
-                        } else
-                        {
-                            currentMethods[cc] = bestMethods[cc];
-                            currentInitialValues[cc] = bestInitialValues[cc];
-                        }
-                    }
-                }
-
-                // Save the most efficient block
-                double efficiency = GetBlockEfficiency(currentLength, currentMethods);
-
-                if (efficiency > bestBlock.Efficiency)
-                {
-                    bestBlock.Methods = currentMethods.ToArray();
-                    bestBlock.InitialValues = currentInitialValues.ToArray();
-                    bestBlock.Length = currentLength;
-                    bestBlock.Efficiency = efficiency;
-                }
-            }
-
-            return (bestBlock);
-        }
-        
 
         // Exact search for the best block (the same result as trying every combination of methods).
         //
@@ -1428,63 +1476,6 @@ namespace DeltaComp
         }
 
 
-        // Find the best compression method for the specified channel
-        private Method GetBestMethod(UInt32 position, byte channel, UInt32 boundary, bool fill)
-        {
-            Method bestMethod = new Method();
-            double bestEfficiency = double.MinValue;
-
-            // Unfortunately, I managed to get the most effective method only by
-            // sequentially iterating through all the methods.
-            byte methodsCount = _methodsCount[channel];
-            for (byte m = 0; m < methodsCount; m++)
-            {
-                UInt32 initialValue = 0;
-                UInt32 length;
-
-                bool afw = false;
-                byte realMethod = GetRealMethod(m, BitsPerChannel[channel], ref afw);
-
-                // Let's speed up a bit, find out if the current method
-                // can theoretically give greater efficiency than the one found earlier.
-                double maxTheoreticalEfficiency = 1.0d - ((double)m / (double)BitsPerChannel[channel]);// GetMethodEfficiency(boundary, m, channel);
-                if (maxTheoreticalEfficiency < bestEfficiency)
-                {
-                    continue;
-                }
-
-                if (realMethod != BitsPerChannel[channel])
-                {
-                    if (afw) length = GetMaxBlockLength3(position, realMethod, channel, out initialValue);
-                    else
-                        length = GetMaxBlockLength(position, realMethod, channel, out initialValue);
-                }
-                else
-                {
-                    length = _maxBlockSize;
-                }
-
-                // Check if the method length matches the specified conditions
-                UInt32 endOfBlock = position + length;
-                if (fill && (endOfBlock < boundary)) continue;
-                if (endOfBlock > boundary) length = boundary - position;
-
-                // And compare its effectiveness with the most effective method from the previous iterations
-                double efficiency = GetMethodEfficiency(length, m, channel);
-
-                if (efficiency > bestEfficiency)
-                {
-                    bestEfficiency = efficiency;
-                    bestMethod.Index = m;
-                    bestMethod.InitialValue = initialValue;
-                    bestMethod.Length = length;
-                }
-            }
-
-            return (bestMethod);
-        }
-
-
         // Get maximum Fixed Window block length
         // (I gave a detailed description in the 1st sprint,
         // see the link at the beginning of the file)
@@ -1691,17 +1682,6 @@ namespace DeltaComp
             }
 
             return (bitsPerBlock);
-        }
-
-
-        // Get method efficiency (1 - method bits / raw bits)
-        private double GetMethodEfficiency(UInt32 length, byte method, byte channel)
-        {
-            byte bitDepth = BitsPerChannel[channel];
-            double bitsPerMethod = (double)_blockSizeBits / ChannelsCount + (double)BitsPerMethodDeclaration[channel];
-            bitsPerMethod += (double)GetCompressedBitsForMethod(length, method, bitDepth);
-
-            return (1.0d - (double)bitsPerMethod / ((double)length * (double)bitDepth));
         }
 
 

@@ -86,6 +86,7 @@ namespace DeltaComp
             public const string DefaultXmlFilename = "Header_Source.xml";
             public const string DefaultXsltFilename = "Header_Transformation.xslt";
             public const string DefaultTargetPlatform = "All";
+            public const int AutoSettingsModeIndex = 1;
 
             // Supported pixel formats list
             public static readonly Dictionary<PixelFormat, PixelFormatParameters> SupportedFormats = 
@@ -241,7 +242,7 @@ namespace DeltaComp
             public bool PreviewIsUpToDate;
             public int SelectedBlockSize;
             public int SelectedDeltaOption;
-            public int SelectedSearchOption;
+            public int SelectedSettingsMode;
             public int SelectedPlatform;
             public volatile CompressionStage Stage;
             public volatile float Progress;
@@ -337,7 +338,7 @@ namespace DeltaComp
                     PreviewIsUpToDate = false,
                     SelectedBlockSize = BlockSizeBitsComboBox.SelectedIndex,
                     SelectedDeltaOption = DeltaOptionComboBox.SelectedIndex,
-                    SelectedSearchOption = BlockSearchOptionComboBox.SelectedIndex,
+                    SelectedSettingsMode = SettingsModeComboBox.SelectedIndex,
                     SelectedPlatform = TargetPlatformComboBox.SelectedIndex,
                     Stage = CompressionStage.None,
                     Progress = 0.0f,
@@ -1176,7 +1177,51 @@ namespace DeltaComp
 
             _compressor.BlockSizeBits = (byte)(Int32)BlockSizeBitsComboBox.SelectedValue;
             _compressor.DeltaCalculationOption = (DeltaOption)DeltaOptionComboBox.SelectedIndex;
-            _compressor.UseBruteForceBestBlockSearch = BlockSearchOptionComboBox.SelectedIndex == 1 ? true : false;
+
+            if (!_compressionCancellationTokenSource.TryReset())
+            {
+                _compressionCancellationTokenSource.Dispose();
+                _compressionCancellationTokenSource = new CancellationTokenSource();
+            }
+            CancellationToken token = _compressionCancellationTokenSource.Token;
+
+            // Automatic selection of the settings (the smallest output wins)
+            if (SettingsModeComboBox.SelectedIndex == Constants.AutoSettingsModeIndex)
+            {
+                List<byte> blockSizeBitsOptions = ((Int32[])FindResource("BlockSizeBits")).Select(b => (byte)b).ToList();
+                List<byte> squareWidths = _squaringOptions.Select(o => (o.Size > 1) ? o.Size : (byte)1).ToList();
+                bool isImage = currentContext.Source is BitmapDataSource;
+                Compressor compressor = _compressor;
+                try
+                {
+                    AutoSettings settings = await Task.Run(() => compressor.AutoSelectSettings(blockSizeBitsOptions,
+                        Enum.GetValues<DeltaOption>(), isImage ? squareWidths : new List<byte> { 1 }, token), token);
+
+                    // Show the chosen settings
+                    BlockSizeBitsComboBox.SelectedValue = (Int32)settings.BlockSizeBits;
+                    DeltaOptionComboBox.SelectedIndex = (int)settings.DeltaCalculationOption;
+                    if (isImage)
+                    {
+                        int squareIndex = _squaringOptions.FindIndex(o => (o.Size > 1 ? o.Size : 1) == settings.WidthOfSquare);
+                        if (squareIndex >= 0) ImageSplitIntoSquaresComboBox.SelectedIndex = squareIndex;
+                    }
+                }
+                catch (Exception ex)
+                {
+                    if (ex is OperationCanceledException)
+                    {
+                        _contexts[_currentContextIndex].Stage = CompressionStage.Cancelled;
+                    }
+                    else
+                    {
+                        DisplayMessage(MessageBoxImage.Error, ex.Message, Constants.ErrorWindowCaption);
+                        UpdateProgressDelegate(CompressionStage.Failed, _contexts[_currentContextIndex].Progress);
+                    }
+                    _compressor = null;
+                    EnableControls();
+                    return;
+                }
+            }
 
             // Create and configure export class instance
             _export = new CodeExport(Constants.DefaultXmlFilename, Constants.DefaultXsltFilename);
@@ -1209,14 +1254,7 @@ namespace DeltaComp
                 return;
             }
 
-            if (!_compressionCancellationTokenSource.TryReset())
-            {
-                _compressionCancellationTokenSource.Dispose();
-                _compressionCancellationTokenSource = new CancellationTokenSource();
-            }
-
             // Run compression task
-            CancellationToken token = _compressionCancellationTokenSource.Token;
             try
             {
                 await Task.Run(() => { _compressor.Compress(token); }, token);
@@ -1339,7 +1377,7 @@ namespace DeltaComp
                 ref CompressionContext lastContext = ref _contexts[_currentContextIndex];
                 lastContext.SelectedBlockSize = BlockSizeBitsComboBox.SelectedIndex;
                 lastContext.SelectedDeltaOption = DeltaOptionComboBox.SelectedIndex;
-                lastContext.SelectedSearchOption = BlockSearchOptionComboBox.SelectedIndex;
+                lastContext.SelectedSettingsMode = SettingsModeComboBox.SelectedIndex;
                 lastContext.SelectedPlatform = TargetPlatformComboBox.SelectedIndex;
             }
 
@@ -1351,7 +1389,7 @@ namespace DeltaComp
             // Restore compression context for selected tab
             BlockSizeBitsComboBox.SelectedIndex = currentContext.SelectedBlockSize;
             DeltaOptionComboBox.SelectedIndex = currentContext.SelectedDeltaOption;
-            BlockSearchOptionComboBox.SelectedIndex = currentContext.SelectedSearchOption;
+            SettingsModeComboBox.SelectedIndex = currentContext.SelectedSettingsMode;
             TargetPlatformComboBox.SelectedIndex = currentContext.SelectedPlatform;
 
             // Update other UI elements
@@ -1402,7 +1440,7 @@ namespace DeltaComp
             DataSourceTabControl.IsEnabled = false;
             BlockSizeBitsComboBox.IsEnabled = false;
             DeltaOptionComboBox.IsEnabled = false;
-            BlockSearchOptionComboBox.IsEnabled = false;
+            SettingsModeComboBox.IsEnabled = false;
             TargetPlatformComboBox.IsEnabled = false;
             CompressButton.IsEnabled = false;
 
@@ -1416,7 +1454,7 @@ namespace DeltaComp
             DataSourceTabControl.IsEnabled = true;
             BlockSizeBitsComboBox.IsEnabled = true;
             DeltaOptionComboBox.IsEnabled = true;
-            BlockSearchOptionComboBox.IsEnabled = true;
+            SettingsModeComboBox.IsEnabled = true;
             TargetPlatformComboBox.IsEnabled = true;
             CompressButton.Content = Constants.CompressButtonCaption;
             CompressButton.IsEnabled = sourceDataAvailable;
