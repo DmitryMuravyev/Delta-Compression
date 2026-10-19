@@ -24,7 +24,7 @@ jobs:
 
       - uses: actions/setup-dotnet@v4
         with:
-          global-json-file: global.json
+          dotnet-version: 10.0.x
 
       - name: Publish (self-contained, trimmed)
         run: dotnet publish src/DeltaComp.App -p:PublishProfile=${{ matrix.rid }} -p:Version=${GITHUB_REF_NAME#v}
