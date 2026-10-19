@@ -1,12 +1,14 @@
 ![Mini-poster](https://github.com/user-attachments/assets/1be914a8-f612-4b55-a046-98ea5684088d)
 
 [![Русский](https://img.shields.io/badge/%D0%A0%D1%83%D1%81%D1%81%D0%BA%D0%B8%D0%B9-8A2BE2)](README.ru.md)
+[![CI](https://github.com/DmitryMuravyev/Delta-Compression/actions/workflows/ci.yml/badge.svg)](https://github.com/DmitryMuravyev/Delta-Compression/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/github/v/release/DmitryMuravyev/Delta-Compression)](https://github.com/DmitryMuravyev/Delta-Compression/releases/latest)
 
 <h1>What is it and what is it for</h1>
 
 It is a simple and lightweight compressor/decompressor based on the delta encoding method. I planned it as a small auxiliary module for my MCU projects to output graphics to the display, but I got a little carried away and the project turned out to be quite extensive. Nevertheless, its main purpose is still to reduce the size of graphical interface elements with their further decompression/displaying on the screen. This technology can be useful in embedded small and medium-level systems (among the examples I made [one for ATtiny85](/Examples/AVR/ATtiny85)).
 
-The compressor application is written for Windows (although it can be ported to any platform on which the .NET can be installed), and for decompression I have prepared several versions of the source code, differing in their capabilities and performance.
+The compressor application runs on Windows and Linux (it is built with .NET 10 and Avalonia and needs no .NET installation), and for decompression I have prepared several versions of the source code, differing in their capabilities and performance.
 
 And of course the project can be used to compress any data.
 
@@ -26,6 +28,8 @@ Sprint 1 - https://www.patreon.com/posts/delta-encoding-1-106850934
 Sprint 2 - https://www.patreon.com/posts/delta-encoding-2-108056837  
 Sprint 3 - https://www.patreon.com/posts/delta-encoding-3-108236064  
 
+The presentations of all sprints are in the [docs](/docs) folder. Sprint 4 ([PDF](/docs/Sprint_4_Mathematical_foundation.pdf)) gives the mathematical foundation of version 2: an exact best-block search, the provably smallest chain of blocks and the automatic selection of settings. What changed in version 2 and why is described in [docs/v2-changes.md](/docs/v2-changes.md).
+
 <h1>Features</h1>
 
 - Supported image size up to 65535 x 65535px;
@@ -39,6 +43,9 @@ Sprint 3 - https://www.patreon.com/posts/delta-encoding-3-108236064
 - conversion to grayscale;
 - alpha channel compression;
 - 4 delta calculation options;
+- the smallest possible chain of blocks for the chosen settings (dynamic programming over the whole data);
+- automatic selection of the block length field, delta option and square size (Auto settings);
+- PNG images are read at their exact bit depth (1/2/4/8/16-bit grayscale, 8/16-bit color, palette, alpha);
 - AVR "far" memory access support*;
 - splitting compressed data into memory chunks (up to 32767 bytes)*;
 - generating a header file with compressed data and their descriptive metadata. You just need to include this file in your code and pass references to the constants declared in it to the decompression procedure;
@@ -49,7 +56,7 @@ Sprint 3 - https://www.patreon.com/posts/delta-encoding-3-108236064
 <h1>How to use it</h1>
 <h2>Compression</h2>
 
-![Application](https://github.com/user-attachments/assets/88e63850-9be2-4132-8754-f7246748f318)
+![Application](/docs/images/screenshot-image.png)
 
 The compression application contains 2 tabs: for images and for any other files. After opening an image or file, you can set up the desired channel configuration, and select the ***Split into squares*** mode for images.
 In the preview area, you can see how the image (or data divided into channels) will look for the selected configuration.  
@@ -57,8 +64,8 @@ In the preview area, you can see how the image (or data divided into channels) w
 Compression settings are configured at the bottom of the window:
 - The number of bits of the block length field. The larger this field, the longer blocks the compression algorithm will be able to make. This parameter is configured individually for each specific data instance and is usually in the range of 5-8 bits.
 - Delta calculation method. A Fixed Window is more suitable for low-contrast noise, and an Adaptive Floating Window is better for gradients (refer to the links above). Combinations of them are also available.
-- Searching best blocks algorithm option: either faster or more efficient.
-- Selection of the platform for which the header .h-file will be generated. The only difference between AVR and other platforms is that the macro symbol "PROGMEM" is added to the AVR array constant and a warning comment is issued every 16384 bytes of the array about exceeding this threshold. For other platforms these actions are not performed (configuration of platforms and code generation features can be customized and are located in the files: [DeltaComp.dll.config](/Release/DeltaComp.dll.config), [Header_Source.xml](/Release/Header_Source.xml), [Header_Transformation.xslt](/Release/Header_Transformation.xslt)).
+- Settings: ***Manual*** uses the block length field, delta method and squares you selected. ***Auto*** (the default) tries the block length fields, delta methods and square sizes, keeps the combination that gives the smallest file and shows it in the corresponding fields. Since Auto may choose any delta method and square size, check the generated .h-file and configure the decompressor accordingly (see Decompression below).
+- Selection of the platform for which the header .h-file will be generated. The only difference between AVR and other platforms is that the macro symbol "PROGMEM" is added to the AVR array constant and a warning comment is issued every 16384 bytes of the array about exceeding this threshold. For other platforms these actions are not performed (configuration of platforms and code generation features can be customized and are located next to the application: [appsettings.json](/src/DeltaComp.App/appsettings.json), [Header_Source.xml](/src/DeltaComp.App/Header_Source.xml), [Header_Transformation.xslt](/src/DeltaComp.App/Header_Transformation.xslt)).
 
 After clicking on the "Compress" button and selecting the path to save the file, data analysis is performed first (blue progress bar), and then compression and writing the array to the output file (green progress bar).  
 ${\color{red}Attention!}$ The file name will be used as the base for macro names and constant names in the generated file.
@@ -183,7 +190,40 @@ decompressNextFrames(dc, dataChunks, decompressedData, framesCount);
 
 <h1>Download</h1>
 
-***In case you don't have .NET 8 installed, I have published [self-contained application versions](https://drive.google.com/drive/folders/18RQaH1zRoYLzu4I6Uneg_3HMOnUn0RrV) for x86 and x64.***
+Ready-to-run versions for Windows x64 and Linux x64 are on the [Releases](https://github.com/DmitryMuravyev/Delta-Compression/releases/latest) page. Each one is a single self-contained executable, no .NET installation is needed. Unpack the archive and run `DeltaComp.exe` (Windows) or `./DeltaComp` (Linux). Keep `appsettings.json`, `Header_Source.xml` and `Header_Transformation.xslt` next to the executable.
+
+The changes between versions are listed in the [CHANGELOG](CHANGELOG.md).
+
+<h1>Building from source</h1>
+
+You need the [.NET 10 SDK](https://dotnet.microsoft.com/download/dotnet/10.0).
+
+```sh
+# Run the application
+dotnet run --project src/DeltaComp.App
+
+# Publish a self-contained, trimmed single-file executable
+dotnet publish src/DeltaComp.App -p:PublishProfile=win-x64
+dotnet publish src/DeltaComp.App -p:PublishProfile=linux-x64
+# The result is in artifacts/publish/<runtime>/
+
+# Tests: headless UI tests, compression benchmark with byte-exact baselines
+dotnet test tests/DeltaComp.App.Tests
+dotnet run -c Release --project tests/DeltaComp.Bench -- --optimal
+```
+
+The repository layout:
+
+| Folder | Contents |
+| --- | --- |
+| [src/DeltaComp.Core](/src/DeltaComp.Core) | The compression library, independent of the UI |
+| [src/DeltaComp.App](/src/DeltaComp.App) | The cross-platform desktop application (Avalonia) |
+| [Decompression](/Decompression) | Decompression sources for microcontrollers |
+| [Examples](/Examples) | Decompression examples for AVR, ESP32 and STM32 |
+| [tests](/tests) | UI tests, benchmark, round-trip check with the microcontroller decoder, test data |
+| [docs](/docs) | Sprint presentations and the description of version 2 |
+
+Avalonia collects anonymous build-time telemetry; set the environment variable `AVALONIA_TELEMETRY_OPTOUT=1` to turn it off.
 
 <h1>Links</h1>
 

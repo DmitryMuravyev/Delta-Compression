@@ -1,0 +1,12 @@
+# Files are stored as they are (most sources use CRLF), so no line-ending normalization is done.
+
+# Shell scripts must keep LF to run on Linux
+*.sh text eol=lf
+
+# Binary files
+*.png binary
+*.jpg binary
+*.ico binary
+*.pdf binary
+*.bmp binary
+*.gif binary

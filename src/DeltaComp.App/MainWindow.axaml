@@ -1,0 +1,192 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:local="clr-namespace:DeltaComp;assembly=DeltaComp.Core"
+        x:Class="DeltaComp.MainWindow"
+        Title="DeltaComp" Icon="/Assets/DeltaComp.ico"
+        Width="900" Height="540" MinWidth="860" MinHeight="500"
+        WindowStartupLocation="CenterScreen">
+
+    <Window.Resources>
+        <!-- Checkerboard under the images to show transparency -->
+        <DrawingBrush x:Key="CheckerBrush" TileMode="Tile" DestinationRect="0,0,32,32">
+            <DrawingBrush.Drawing>
+                <DrawingGroup>
+                    <GeometryDrawing Geometry="M0,0 H2 V2 H0Z" Brush="White"/>
+                    <GeometryDrawing Geometry="M0,0 H1 V1 H2 V2 H1 V1 H0Z" Brush="LightGray"/>
+                </DrawingGroup>
+            </DrawingBrush.Drawing>
+        </DrawingBrush>
+    </Window.Resources>
+
+    <Window.Styles>
+        <Style Selector="Button.icon">
+            <Setter Property="Width" Value="32"/>
+            <Setter Property="Height" Value="32"/>
+            <Setter Property="Padding" Value="0"/>
+            <Setter Property="HorizontalContentAlignment" Value="Center"/>
+            <Setter Property="VerticalContentAlignment" Value="Center"/>
+        </Style>
+        <Style Selector="Button.icon PathIcon">
+            <Setter Property="Width" Value="14"/>
+            <Setter Property="Height" Value="14"/>
+        </Style>
+        <Style Selector="TextBlock.caption">
+            <Setter Property="Margin" Value="0,0,0,4"/>
+        </Style>
+    </Window.Styles>
+
+    <Grid RowDefinitions="*,Auto,Auto">
+
+        <TabControl Name="DataSourceTabControl" Grid.Row="0" Padding="0" SelectionChanged="DataSourceTabControl_SelectionChanged">
+
+            <!-- Image tab -->
+            <TabItem Name="ImageTab" Header="Image">
+                <Grid ColumnDefinitions="*,220,*" Margin="10,6,10,10">
+
+                    <!-- Source image -->
+                    <Grid Grid.Column="0" RowDefinitions="Auto,*">
+                        <Button Name="ImageOpenButton" Content="Open…" Width="100" HorizontalContentAlignment="Center" Click="ImageOpenButton_Click"/>
+                        <StackPanel Grid.Row="0" HorizontalAlignment="Right" VerticalAlignment="Center">
+                            <TextBlock Name="ImageOriginalSizeLabel" Text="0.00KB" FontWeight="Bold" HorizontalAlignment="Right"/>
+                            <TextBlock Name="ImageFormatLabel" Text="" FontSize="11" Opacity="0.7" HorizontalAlignment="Right"/>
+                        </StackPanel>
+                        <Border Grid.Row="1" Margin="0,8,0,0" Background="{StaticResource CheckerBrush}" ClipToBounds="True">
+                            <Image Name="ImageSourceViewer" Stretch="Uniform" RenderOptions.BitmapInterpolationMode="None"/>
+                        </Border>
+                    </Grid>
+
+                    <!-- Channels -->
+                    <Grid Grid.Column="1" Margin="10,0" RowDefinitions="Auto,Auto,Auto,Auto,*,Auto,Auto,Auto">
+                        <CheckBox Name="ImageConvertToGrayscaleCheckBox" Grid.Row="0" Content="Convert to Grayscale" Margin="0,38,0,0" IsEnabled="False"
+                                  IsCheckedChanged="ImageChannelParametersChanged"/>
+                        <CheckBox Name="ImageUseAlphaCheckBox" Grid.Row="1" Content="Use Alpha" IsEnabled="False"
+                                  IsCheckedChanged="ImageChannelParametersChanged"/>
+                        <Grid Grid.Row="2" ColumnDefinitions="*,*" Margin="0,6,0,2">
+                            <TextBlock Text="Channel" FontWeight="SemiBold" Margin="8,0,0,0"/>
+                            <TextBlock Grid.Column="1" Text="Bits" FontWeight="SemiBold" Margin="4,0,0,0"/>
+                        </Grid>
+                        <ListBox Name="ImageChannelsListBox" Grid.Row="3" Height="152" SelectionMode="Single"
+                                 SelectionChanged="ImageChannelsListBox_SelectionChanged"
+                                 BorderThickness="1" BorderBrush="{DynamicResource SystemControlForegroundBaseLowBrush}">
+                            <ListBox.ItemTemplate>
+                                <DataTemplate x:DataType="local:Channel">
+                                    <Grid ColumnDefinitions="*,*">
+                                        <TextBlock Text="{Binding Name}" VerticalAlignment="Center"/>
+                                        <ComboBox Grid.Column="1" HorizontalAlignment="Stretch"
+                                                  ItemsSource="{Binding BitDepthList}"
+                                                  SelectedItem="{Binding TargetBitDepth, Mode=TwoWay}"
+                                                  SelectionChanged="ImageChannelBitDepthComboBox_SelectionChanged"/>
+                                    </Grid>
+                                </DataTemplate>
+                            </ListBox.ItemTemplate>
+                        </ListBox>
+                        <Grid Grid.Row="4" ColumnDefinitions="Auto,Auto,*,Auto,Auto" Margin="0,6,0,0" VerticalAlignment="Top">
+                            <Button Name="ImageBitDepthMinusButton" Grid.Column="0" Classes="icon" IsEnabled="False" Click="ImageAllChannelsChangeBitDepthButton_Click"
+                                    ToolTip.Tip="Decrease the bit depth of all channels">
+                                <PathIcon Data="M 0 6 L 0 10 L 16 10 L 16 6 Z"/>
+                            </Button>
+                            <Button Name="ImageBitDepthPlusButton" Grid.Column="1" Classes="icon" Margin="5,0,0,0" IsEnabled="False" Click="ImageAllChannelsChangeBitDepthButton_Click"
+                                    ToolTip.Tip="Increase the bit depth of all channels">
+                                <PathIcon Data="M 0 6 L 0 10 L 6 10 L 6 16 L 10 16 L 10 10 L 16 10 L 16 6 L 10 6 L 10 0 L 6 0 L 6 6 Z"/>
+                            </Button>
+                            <Button Name="ImageChannelDownButton" Grid.Column="3" Classes="icon" IsEnabled="False" Click="ImageChannelMoveButton_Click"
+                                    ToolTip.Tip="Move the channel down">
+                                <PathIcon Data="M 0 4 L 8 12 L 16 4 Z"/>
+                            </Button>
+                            <Button Name="ImageChannelUpButton" Grid.Column="4" Classes="icon" Margin="5,0,0,0" IsEnabled="False" Click="ImageChannelMoveButton_Click"
+                                    ToolTip.Tip="Move the channel up">
+                                <PathIcon Data="M 0 12 L 16 12 L 8 4 Z"/>
+                            </Button>
+                        </Grid>
+                        <TextBlock Grid.Row="6" Classes="caption" Text="Split into squares with side:"/>
+                        <ComboBox Name="ImageSplitIntoSquaresComboBox" Grid.Row="7" HorizontalAlignment="Stretch" IsEnabled="False"/>
+                    </Grid>
+
+                    <!-- Preview -->
+                    <Grid Grid.Column="2" RowDefinitions="Auto,*">
+                        <TextBlock Name="ImageSourceSizeLabel" Text="0.00KB" FontWeight="Bold" VerticalAlignment="Center"/>
+                        <Button Name="ImageUpdatePreviewButton" Content="Update Preview" HorizontalAlignment="Right" IsEnabled="False" Click="ImageUpdatePreviewButton_Click"/>
+                        <Border Grid.Row="1" Margin="0,8,0,0" Background="{StaticResource CheckerBrush}" ClipToBounds="True">
+                            <Image Name="ImageDestinationViewer" Stretch="Uniform" RenderOptions.BitmapInterpolationMode="None"/>
+                        </Border>
+                    </Grid>
+                </Grid>
+            </TabItem>
+
+            <!-- Custom data tab -->
+            <TabItem Name="CustomDataTab" Header="Custom Data">
+                <Grid ColumnDefinitions="120,*" RowDefinitions="Auto,*" Margin="10,6,10,10">
+                    <Button Name="FileOpenButton" Content="Open…" Width="100" HorizontalContentAlignment="Center" Click="FileOpenButton_Click"/>
+                    <TextBlock Name="FileNameLabel" Grid.Column="1" Text="-" FontSize="16" FontWeight="Bold" VerticalAlignment="Center" Margin="6,0,130,0" TextTrimming="CharacterEllipsis"/>
+                    <Button Name="FileUpdatePreviewButton" Grid.Column="1" Content="Update Preview" HorizontalAlignment="Right" IsEnabled="False" Click="FileUpdatePreviewButton_Click"/>
+
+                    <StackPanel Grid.Row="1" Grid.Column="0" Margin="0,10,0,0" Spacing="2">
+                        <TextBlock Classes="caption" Text="Channels count:"/>
+                        <ComboBox Name="FileChannelsCountComboBox" Width="100" IsEnabled="False" SelectedIndex="0" SelectionChanged="FileChannelsCountComboBox_SelectionChanged">
+                            <ComboBoxItem Content="1"/>
+                            <ComboBoxItem Content="2"/>
+                            <ComboBoxItem Content="3"/>
+                            <ComboBoxItem Content="4"/>
+                        </ComboBox>
+                        <TextBlock Classes="caption" Text="Bits per channel:" Margin="0,10,0,4"/>
+                        <ComboBox Name="FileBitsPerChannelComboBox" Width="100" IsEnabled="False" SelectedIndex="0" SelectionChanged="FileBitsPerChannelComboBox_SelectionChanged">
+                            <ComboBoxItem Content="8"/>
+                            <ComboBoxItem Content="16"/>
+                            <ComboBoxItem Content="24"/>
+                            <ComboBoxItem Content="32"/>
+                        </ComboBox>
+                        <RadioButton Name="FileBigEndianRadioButton" Content="Big endian" GroupName="Endianness" Margin="0,10,0,0" IsChecked="True" IsEnabled="False"
+                                     IsCheckedChanged="FileEndiannessRadioButton_StateChanged"/>
+                        <RadioButton Name="FileLittleEndianRadioButton" Content="Little endian" GroupName="Endianness"
+                                     IsEnabled="{Binding #FileBigEndianRadioButton.IsEnabled}"/>
+                    </StackPanel>
+                    <TextBlock Name="FileOriginalSizeLabel" Grid.Row="1" Grid.Column="0" Text="0.00KB" FontSize="20" FontWeight="Bold"
+                               VerticalAlignment="Bottom" HorizontalAlignment="Left" Width="100" TextAlignment="Center"/>
+
+                    <TextBox Name="FilePreviewTextBox" Grid.Row="1" Grid.Column="1" Margin="6,10,0,0" TextWrapping="Wrap" IsReadOnly="True"
+                             AcceptsReturn="True" VerticalContentAlignment="Top"
+                             FontFamily="Cascadia Mono,Consolas,DejaVu Sans Mono,Liberation Mono,Courier New,monospace"/>
+                </Grid>
+            </TabItem>
+        </TabControl>
+
+        <!-- Compression settings -->
+        <Grid Grid.Row="1" ColumnDefinitions="Auto,Auto,Auto,Auto,*,Auto,Auto" Margin="10,4,10,8">
+            <StackPanel Grid.Column="0" Margin="0,0,16,0">
+                <TextBlock Classes="caption" Text="Block size (bits):"/>
+                <ComboBox Name="BlockSizeBitsComboBox" Width="100"/>
+            </StackPanel>
+            <StackPanel Grid.Column="1" Margin="0,0,16,0">
+                <TextBlock Classes="caption" Text="Delta option:"/>
+                <ComboBox Name="DeltaOptionComboBox" Width="220" SelectedIndex="2">
+                    <ComboBoxItem Content="Fixed Window only"/>
+                    <ComboBoxItem Content="Adaptive Floating Window only"/>
+                    <ComboBoxItem Content="Both options, Fixed first"/>
+                    <ComboBoxItem Content="Both options, Adaptive first"/>
+                </ComboBox>
+            </StackPanel>
+            <StackPanel Grid.Column="2" Margin="0,0,16,0">
+                <TextBlock Classes="caption" Text="Settings:"/>
+                <ComboBox Name="SettingsModeComboBox" Width="100" SelectedIndex="1"
+                          ToolTip.Tip="Auto: try the block sizes, delta options and squares and keep the smallest result">
+                    <ComboBoxItem Content="Manual"/>
+                    <ComboBoxItem Content="Auto"/>
+                </ComboBox>
+            </StackPanel>
+            <StackPanel Grid.Column="3" Margin="0,0,16,0">
+                <TextBlock Classes="caption" Text=".h platform:"/>
+                <ComboBox Name="TargetPlatformComboBox" Width="100"/>
+            </StackPanel>
+
+            <StackPanel Grid.Column="5" Margin="0,0,12,0" VerticalAlignment="Center" Width="130">
+                <TextBlock Text="Efficiency:" HorizontalAlignment="Center" FontSize="11"/>
+                <TextBlock Name="CompressionEfficiencyLabel" Text="0.00%" FontSize="24" FontWeight="Bold" HorizontalAlignment="Center"/>
+                <TextBlock Name="CompressedSizeLabel" Text="0.00KB" FontSize="11" FontWeight="Bold" HorizontalAlignment="Center"/>
+            </StackPanel>
+            <Button Name="CompressButton" Grid.Column="6" Content="Compress" Width="100" Height="48" IsEnabled="False"
+                    HorizontalContentAlignment="Center" VerticalContentAlignment="Center" Classes="accent" Click="CompressButton_Click"/>
+        </Grid>
+
+        <ProgressBar Name="CompressionProgress" Grid.Row="2" Height="8" MinHeight="8" CornerRadius="0" Minimum="0" Maximum="100"/>
+    </Grid>
+</Window>

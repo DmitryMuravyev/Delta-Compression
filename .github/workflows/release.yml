@@ -1,0 +1,81 @@
+name: Release
+
+# Push a tag like v2.0.0 to build both executables and publish a GitHub release.
+on:
+  push:
+    tags: [ 'v*' ]
+
+permissions:
+  contents: write
+
+env:
+  DOTNET_NOLOGO: true
+  DOTNET_CLI_TELEMETRY_OPTOUT: true
+
+jobs:
+  build:
+    name: Publish ${{ matrix.rid }}
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        rid: [ win-x64, linux-x64 ]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+
+      - name: Publish (self-contained, trimmed)
+        run: dotnet publish src/DeltaComp.App -p:PublishProfile=${{ matrix.rid }} -p:Version=${GITHUB_REF_NAME#v}
+
+      - name: Package
+        run: |
+          name="DeltaComp-${GITHUB_REF_NAME}-${{ matrix.rid }}"
+          dir="artifacts/package/$name"
+          mkdir -p "$dir"
+          cp -r artifacts/publish/${{ matrix.rid }}/. "$dir/"
+          cp LICENSE README.md README.ru.md CHANGELOG.md THIRD-PARTY-NOTICES.md "$dir/"
+          cd artifacts/package
+          if [ "${{ matrix.rid }}" = "win-x64" ]; then
+            zip -r -9 "$name.zip" "$name"
+          else
+            tar -czf "$name.tar.gz" "$name"
+          fi
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: package-${{ matrix.rid }}
+          path: artifacts/package/DeltaComp-*.*
+
+  release:
+    name: GitHub release
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          path: packages
+          merge-multiple: true
+
+      - name: Release notes from CHANGELOG.md
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          awk -v v="$version" '
+            $0 ~ "^## \\[" v "\\]" { found = 1; next }
+            found && /^## \[/ { exit }
+            found && /^\[[0-9]/ { exit }
+            found { print }
+          ' CHANGELOG.md > release-notes.md
+          # Relative links of the changelog point into the repository at this tag
+          sed -i -E "s#\]\((docs|Decompression)([^)]*)\)#](https://github.com/${GITHUB_REPOSITORY}/blob/${GITHUB_REF_NAME}/\1\2)#g" release-notes.md
+          echo "Full changelog: [CHANGELOG.md](https://github.com/${GITHUB_REPOSITORY}/blob/${GITHUB_REF_NAME}/CHANGELOG.md)" >> release-notes.md
+          cat release-notes.md
+
+      - uses: softprops/action-gh-release@v2
+        with:
+          name: DeltaComp ${{ github.ref_name }}
+          body_path: release-notes.md
+          files: packages/*

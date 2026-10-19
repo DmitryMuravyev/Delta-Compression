@@ -1,0 +1,18 @@
+<Project>
+
+  <!-- Shared properties of all projects in the repository. -->
+  <PropertyGroup>
+    <Version>2.0.0</Version>
+    <Authors>Dmitry Muravyev</Authors>
+    <Company>Dmitry Muravyev</Company>
+    <Product>DeltaComp</Product>
+    <Description>Delta encoding compressor for microcontroller graphics and data.</Description>
+    <Copyright>Copyright (c) 2024 Dmitry Muravyev</Copyright>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <RepositoryUrl>https://github.com/DmitryMuravyev/Delta-Compression</RepositoryUrl>
+    <LangVersion>latest</LangVersion>
+    <Deterministic>true</Deterministic>
+    <ContinuousIntegrationBuild Condition="'$(GITHUB_ACTIONS)' == 'true'">true</ContinuousIntegrationBuild>
+  </PropertyGroup>
+
+</Project>

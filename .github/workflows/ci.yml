@@ -1,0 +1,66 @@
+name: CI
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  DOTNET_NOLOGO: true
+  DOTNET_CLI_TELEMETRY_OPTOUT: true
+
+jobs:
+  test:
+    name: Build and test (Linux)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+
+      - name: Build
+        run: dotnet build DeltaComp.sln -c Release
+
+      - name: UI tests (headless)
+        run: dotnet test tests/DeltaComp.App.Tests -c Release --no-build
+
+      - name: Build the microcontroller decoder for the PC
+        run: bash tests/Decoder/build.sh
+
+      - name: Benchmark, byte-exact check against the original compressor, decoder round trip
+        run: dotnet run -c Release --no-build --project tests/DeltaComp.Bench -- --decoder tests/Decoder/bin
+
+      - name: Optimal chain, baseline check and decoder round trip
+        run: dotnet run -c Release --no-build --project tests/DeltaComp.Bench -- --optimal --decoder tests/Decoder/bin
+
+  publish:
+    name: Publish ${{ matrix.rid }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        include:
+          - rid: win-x64
+            os: windows-latest
+          - rid: linux-x64
+            os: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+
+      - name: Publish (self-contained, trimmed)
+        run: dotnet publish src/DeltaComp.App -p:PublishProfile=${{ matrix.rid }}
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: DeltaComp-${{ matrix.rid }}
+          path: artifacts/publish/${{ matrix.rid }}/
+          retention-days: 14

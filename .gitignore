@@ -1,8 +1,19 @@
 # Build output
 bin/
 obj/
+artifacts/
+TestResults/
+
+# IDE
 .vs/
+.vscode/
+.idea/
 *.user
+*.suo
 
 # Native round-trip decoder builds
-Benchmarks/Decoder/bin/
+tests/Decoder/bin/
+
+# OS
+.DS_Store
+Thumbs.db
