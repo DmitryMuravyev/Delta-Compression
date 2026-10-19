@@ -7,6 +7,10 @@
         WindowStartupLocation="CenterScreen">
 
     <Window.Resources>
+        <!-- Tab headers: the Fluent default (24px text) is cramped in the compact density -->
+        <x:Double x:Key="TabItemHeaderFontSize">16</x:Double>
+        <x:Double x:Key="TabItemMinHeight">40</x:Double>
+        <Thickness x:Key="TabItemHeaderMargin">14,0,14,0</Thickness>
         <!-- Checkerboard under the images to show transparency -->
         <DrawingBrush x:Key="CheckerBrush" TileMode="Tile" DestinationRect="0,0,32,32">
             <DrawingBrush.Drawing>
