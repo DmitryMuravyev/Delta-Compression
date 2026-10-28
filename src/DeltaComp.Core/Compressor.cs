@@ -58,6 +58,7 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
+using System.Numerics;
 using System.Text;
 using System.Threading.Tasks;
 using System.Threading;
@@ -165,6 +166,10 @@ namespace DeltaComp
         // Source data, read once and stored in the compression order (already split into squares, if used).
         // Reading through the channels is relatively slow, and each frame is read many times during the analysis.
         private UInt32[][] _frames = null!;
+
+        // The trials of AutoSelectSettings() share the frames in the linear order (instead of a copy per trial),
+        // so a trial that splits the image into squares maps every frame number to its pixel.
+        private bool _framesInLinearOrder = false;
 
         // Number of methods per channel, cached for the duration of the compression
         private byte[] _methodsCount = null!;
@@ -416,18 +421,9 @@ namespace DeltaComp
             if (ImageWidth > 0) trial.WidthOfSquare = square;
 
             trial._methodsCount = new byte[ChannelsCount];
-            trial._frames = new UInt32[ChannelsCount][];
-            for (byte c = 0; c < ChannelsCount; c++)
-            {
-                trial._methodsCount[c] = trial.GetMethodsCount(c);
-                if (!trial.SplitToSquares)
-                {
-                    trial._frames[c] = linearFrames[c];
-                    continue;
-                }
-                trial._frames[c] = new UInt32[TotalFrames];
-                for (UInt32 f = 0; f < TotalFrames; f++) trial._frames[c][f] = linearFrames[c][trial.GetPixelForSquares(f)];
-            }
+            for (byte c = 0; c < ChannelsCount; c++) trial._methodsCount[c] = trial.GetMethodsCount(c);
+            trial._frames = linearFrames;
+            trial._framesInLinearOrder = trial.SplitToSquares;
             return (trial);
         }
 
@@ -874,7 +870,13 @@ namespace DeltaComp
         private UInt64 FindOptimalChain(UInt32[]? bestLength, bool reportProgress)
         {
             if (_frames == null) PrepareFrames();
-            UInt64[] best = new UInt64[TotalFrames + 1];
+
+            // A block is never longer than _maxBlockSize, so only the next _maxBlockSize results are needed:
+            // they are kept in a ring buffer instead of an array for all frames.
+            UInt64 ringMask = Math.Min(BitOperations.RoundUpToPowerOf2((UInt64)_maxBlockSize + 1),
+                                       BitOperations.RoundUpToPowerOf2((UInt64)TotalFrames + 1)) - 1;
+            UInt64[] best = new UInt64[ringMask + 1];
+            best[TotalFrames & ringMask] = 0;
             var lengths = new ChannelMethodLengths(this);
 
             for (Int64 p = (Int64)TotalFrames - 1; p >= 0; p--)
@@ -910,12 +912,12 @@ namespace DeltaComp
                     }
 
                     UInt64 bits = a + slope * l;
-                    UInt32 index = position + l;
+                    UInt64 index = position + l;
                     for (; l <= segmentEnd; l++, index++, bits += slope)
                     {
                         if (bits >= bestBits) { done = true; break; }
 
-                        UInt64 total = bits + best[index];
+                        UInt64 total = bits + best[index & ringMask];
                         if (total < bestBits)
                         {
                             bestBits = total;
@@ -924,7 +926,7 @@ namespace DeltaComp
                     }
                 }
 
-                best[position] = bestBits;
+                best[position & ringMask] = bestBits;
                 if (bestLength != null) bestLength[position] = bestBlockLength;
             }
 
@@ -997,8 +999,10 @@ namespace DeltaComp
                 {
                     BackwardState state = _backward[c];
                     byte bitDepth = _compressor.BitsPerChannel[c];
-                    ReadOnlySpan<UInt32> frames = _compressor._frames[c];
-                    UInt32 currentFrame = frames[(int)position];
+                    UInt32[] frames = _compressor._frames[c];
+                    UInt32 currentFrame = frames[_compressor._framesInLinearOrder ? _compressor.GetPixelForSquares(position) : position];
+                    UInt32 nextFrame = state.NextFrame; // the frame at position + 1 (read in the previous step)
+                    state.NextFrame = currentFrame;
 
                     for (byte w = 0; w < bitDepth; w++)
                     {
@@ -1030,7 +1034,6 @@ namespace DeltaComp
 
                         if (position + 1 < totalFrames)
                         {
-                            UInt32 nextFrame = frames[(int)position + 1];
                             UInt32 windowWidth = 1u << w;
                             UInt32 halfWindowWidth = windowWidth >> 1;
                             UInt32 maxFrameStart = frameWidth - windowWidth;
@@ -1066,11 +1069,13 @@ namespace DeltaComp
                 public readonly MonotonicDeque[] Min, Max;
                 public readonly UInt32[] FixedEnd;      // exclusive end of the longest Fixed window block
                 public readonly UInt32[] AdaptiveBreak; // first frame that doesn't fit the Adaptive window around the previous one
+                public UInt32 NextFrame;                // value of the frame after the current position
 
                 public BackwardState(Compressor compressor, byte channel)
                 {
                     byte bitDepth = compressor.BitsPerChannel[channel];
-                    int capacity = (int)Math.Min((UInt64)compressor._maxBlockSize + 2, (UInt64)compressor.TotalFrames + 2);
+                    // The deques grow when needed: usually they hold only a few elements
+                    int capacity = (int)Math.Min(Math.Min((UInt64)compressor._maxBlockSize + 2, (UInt64)compressor.TotalFrames + 2), 64);
                     Min = new MonotonicDeque[bitDepth];
                     Max = new MonotonicDeque[bitDepth];
                     for (int w = 0; w < bitDepth; w++)
@@ -1088,7 +1093,7 @@ namespace DeltaComp
             // and shrinks at the back (higher indexes). The minimum (or maximum) is at the back.
             private sealed class MonotonicDeque
             {
-                private readonly UInt32[] _indexes, _values;
+                private UInt32[] _indexes, _values;
                 private int _front, _count;
 
                 public MonotonicDeque(int capacity)
@@ -1108,10 +1113,25 @@ namespace DeltaComp
                         if (isMin ? (frontValue >= value) : (frontValue <= value)) { _front = (_front + 1) % _values.Length; _count--; }
                         else break;
                     }
+                    if (_count == _values.Length) Grow();
                     _front = (_front - 1 + _values.Length) % _values.Length;
                     _indexes[_front] = index;
                     _values[_front] = value;
                     _count++;
+                }
+
+                // Double the capacity keeping the order of the elements (the front goes to the start)
+                private void Grow()
+                {
+                    UInt32[] indexes = new UInt32[_values.Length * 2], values = new UInt32[_values.Length * 2];
+                    for (int i = 0; i < _count; i++)
+                    {
+                        indexes[i] = _indexes[(_front + i) % _indexes.Length];
+                        values[i] = _values[(_front + i) % _values.Length];
+                    }
+                    _indexes = indexes;
+                    _values = values;
+                    _front = 0;
                 }
 
                 public void RemoveBackIndex(UInt32 index)

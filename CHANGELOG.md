@@ -7,6 +7,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Fixed
 - Large images (for example a 30-megapixel photo) made the application pause on every checkbox click and before drop-down lists opened. Images larger than 1024 pixels are now shown downscaled, while compression still uses every pixel.
+- Auto settings needed several gigabytes of memory per processor core on large images: every trial kept its own copy of the image and a table for all frames. The trials now share the image and keep only the last block length of results, so memory no longer grows with the number of cores.
 
 ## [2.0.0] - 2026-10-19
 
