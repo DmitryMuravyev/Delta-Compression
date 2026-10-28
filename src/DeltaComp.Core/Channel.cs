@@ -98,7 +98,7 @@ namespace DeltaComp
 
 
         // Target bit depth to which the data format should be reduced.
-        public int TargetBitDepth { get; set; } = 0;
+        public virtual int TargetBitDepth { get; set; } = 0;
 
 
         // An abstract method for getting channel value for a given pixel/frame/symbol, etc.

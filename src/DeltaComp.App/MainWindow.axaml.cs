@@ -154,6 +154,13 @@ namespace DeltaComp
         private byte[]? _previewPixels = null;
         private PixelSize _displaySize;
 
+        // Size of the resulting image (the source image is downscaled to it before compression)
+        private PixelSize _targetSize;
+
+        // The channels downscaled to the resulting size (kept until the size or the set of channels changes)
+        private List<ResampledChannel>? _resampledChannels = null;
+        private PixelSize _resampledSize;
+
         // Compression Task cancellation token
         private CancellationTokenSource _compressionCancellationTokenSource = new CancellationTokenSource();
 
@@ -228,7 +235,9 @@ namespace DeltaComp
 
             ImageSourceViewer.Source = null;
             ImageFormatLabel.Text = "";
+            ImagePreviewFormatLabel.Text = "";
             _image = null;
+            _resampledChannels = null;
             _dataLoading = true;
 
             ImageUpdatePreviewButton.IsEnabled = false;
@@ -237,6 +246,8 @@ namespace DeltaComp
             ImageChannelDownButton.IsEnabled = false;
             ImageChannelUpButton.IsEnabled = false;
             ImageSplitIntoSquaresComboBox.IsEnabled = false;
+            ImageWidthTextBox.IsEnabled = false;
+            ImageHeightTextBox.IsEnabled = false;
             CompressButton.IsEnabled = false;
 
             Bitmap? displayBitmap = null;
@@ -269,7 +280,6 @@ namespace DeltaComp
             BitmapInterpolationMode interpolationMode = ((_image != null) && (_displaySize.Width < _image.Width)) ?
                 BitmapInterpolationMode.LowQuality : BitmapInterpolationMode.None;
             RenderOptions.SetBitmapInterpolationMode(ImageSourceViewer, interpolationMode);
-            RenderOptions.SetBitmapInterpolationMode(ImageDestinationViewer, interpolationMode);
             ImageSourceViewer.Source = displayBitmap;
 
             bool imageAvailable = (_image != null);
@@ -277,18 +287,14 @@ namespace DeltaComp
             {
                 ImageFormatLabel.Text = String.Format("{0}x{1}, {2}", _image!.Width, _image.Height, _image.FormatDescription);
 
-                // Check the available sizes of squares for splitting
-                _squaringOptions.Clear();
-                _squaringOptions.Add(new SquaringOption(0, Constants.NoSplitOption));
-                for (byte i = 2; i <= 16; i++)
-                {
-                    if (((_image.Width % i) == 0) && ((_image.Height % i) == 0))
-                    {
-                        _squaringOptions.Add(new SquaringOption(i, String.Format("{0}x{0}", i)));
-                    }
-                }
-                ImageSplitIntoSquaresComboBox.ItemsSource = _squaringOptions.ToList();
-                ImageSplitIntoSquaresComboBox.SelectedIndex = 0;
+                // The resulting image has the original size until another one is entered
+                _targetSize = new PixelSize(_image.Width, _image.Height);
+                ImageShowTargetSize();
+                ImageWidthTextBox.IsEnabled = true;
+                ImageHeightTextBox.IsEnabled = true;
+
+                ImageSplitIntoSquaresComboBox.SelectedIndex = -1;
+                ImageUpdateSquaringOptions();
                 ImageSplitIntoSquaresComboBox.IsEnabled = true;
 
                 currentContext.Source = _image;
@@ -377,6 +383,47 @@ namespace DeltaComp
         }
 
 
+        // The width or the height of the resulting image is being entered: keep only digits, limit the value
+        // to the original size and calculate the other side from the aspect ratio of the original image.
+        // TextChanged comes through the dispatcher, after the change, so it comes for the texts set by the code too;
+        // those are the current size, which changes nothing (otherwise the other side would be recalculated back
+        // from a rounded value).
+        private void ImageSizeTextBox_TextChanged(object? sender, TextChangedEventArgs e)
+        {
+            if ((_image == null) || (sender is not TextBox textBox)) return;
+
+            bool isWidth = (textBox == ImageWidthTextBox);
+            int maxValue = isWidth ? _image.Width : _image.Height;
+            int otherMaxValue = isWidth ? _image.Height : _image.Width;
+
+            string text = textBox.Text ?? "";
+            string digits = new string(text.Where(Char.IsAsciiDigit).ToArray());
+            if ((digits.Length > 0) && (int.Parse(digits) > maxValue)) digits = maxValue.ToString();
+            if (digits != text) ImageSetSizeText(textBox, digits);
+
+            // An empty field or zero: the input isn't finished yet, so the size stays as it was
+            if (!int.TryParse(digits, out int value) || (value < 1)) return;
+            if (value == (isWidth ? _targetSize.Width : _targetSize.Height)) return;
+
+            int otherValue = Math.Clamp((int)Math.Round((double)value * otherMaxValue / maxValue), 1, otherMaxValue);
+            ImageSetSizeText(isWidth ? ImageHeightTextBox : ImageWidthTextBox, otherValue.ToString());
+
+            PixelSize size = isWidth ? new PixelSize(value, otherValue) : new PixelSize(otherValue, value);
+            if (size == _targetSize) return;
+
+            _targetSize = size;
+            ImageUpdateSquaringOptions();
+            CurrentContext.PreviewIsUpToDate = false;
+        }
+
+
+        // Leaving a size field with an unfinished input (empty or zero) shows the current size again
+        private void ImageSizeTextBox_LostFocus(object? sender, RoutedEventArgs e)
+        {
+            if (_image != null) ImageShowTargetSize();
+        }
+
+
         ////////////////////////////////////////////////////////////////////////////////////////////////////
         // Image tab
         // Other procedures that serve the UI
@@ -423,6 +470,84 @@ namespace DeltaComp
         }
 
 
+        // Show the size of the resulting image in the size fields
+        private void ImageShowTargetSize()
+        {
+            ImageSetSizeText(ImageWidthTextBox, _targetSize.Width.ToString());
+            ImageSetSizeText(ImageHeightTextBox, _targetSize.Height.ToString());
+        }
+
+
+        // Change the text of a size field
+        private static void ImageSetSizeText(TextBox textBox, string text)
+        {
+            if (textBox.Text == text) return;
+            textBox.Text = text;
+            textBox.CaretIndex = text.Length;
+        }
+
+
+        // Find the sizes of squares into which the resulting image can be split, keeping the selected one if possible
+        private void ImageUpdateSquaringOptions()
+        {
+            byte selectedSize = (ImageSplitIntoSquaresComboBox.SelectedItem as SquaringOption)?.Size ?? 0;
+
+            _squaringOptions.Clear();
+            _squaringOptions.Add(new SquaringOption(0, Constants.NoSplitOption));
+            for (byte i = 2; i <= 16; i++)
+            {
+                if (((_targetSize.Width % i) == 0) && ((_targetSize.Height % i) == 0))
+                {
+                    _squaringOptions.Add(new SquaringOption(i, String.Format("{0}x{0}", i)));
+                }
+            }
+            ImageSplitIntoSquaresComboBox.ItemsSource = _squaringOptions.ToList();
+            ImageSplitIntoSquaresComboBox.SelectedIndex = Math.Max(0, _squaringOptions.FindIndex(o => o.Size == selectedSize));
+        }
+
+
+        // The channels of the resulting image: the selected channels, downscaled if a smaller size is entered.
+        // The downscaled data doesn't depend on the order of the channels and their bit depths (the bit depth
+        // is reduced after downscaling), so it is calculated again only when the size or the set of channels changes.
+        private List<Channel> ImageGetResultChannels()
+        {
+            List<Channel> channels = CurrentContext.Channels;
+            if ((_image == null) || ((_targetSize.Width == _image.Width) && (_targetSize.Height == _image.Height))) return channels;
+
+            if ((_resampledChannels == null) || (_resampledSize != _targetSize) || (_resampledChannels.Count != channels.Count) ||
+                _resampledChannels.Any(r => !channels.Contains(r.Source)))
+            {
+                _resampledChannels = null; // Let the old data go before the new one is allocated
+                _resampledChannels = ImageResampler.Resample(channels, _image.Width, _image.Height, _targetSize.Width, _targetSize.Height);
+                _resampledSize = _targetSize;
+            }
+
+            return channels.Select(c => (Channel)_resampledChannels.First(r => r.Source == c)).ToList();
+        }
+
+
+        // Pixel format of the channels, e.g. "RGB 5-6-5, 16 bpp" or "Grayscale 4-bit"
+        private static string GetPixelFormatString(IReadOnlyList<Channel> channels)
+        {
+            if ((channels.Count == 1) && (channels[0].ChannelType == ChannelType.Grayscale))
+            {
+                return String.Format("Grayscale {0}-bit", channels[0].TargetBitDepth);
+            }
+
+            string components = String.Concat(channels.Select(c => c.ChannelType switch
+            {
+                ChannelType.Red => "R",
+                ChannelType.Green => "G",
+                ChannelType.Blue => "B",
+                ChannelType.Alpha => "A",
+                ChannelType.Grayscale => "L",
+                _ => "?"
+            }));
+            return String.Format("{0} {1}, {2} bpp", components, String.Join("-", channels.Select(c => c.TargetBitDepth)),
+                channels.Sum(c => c.TargetBitDepth));
+        }
+
+
         // Update pixel component channels list
         private void ImageUpdateChannels()
         {
@@ -431,8 +556,10 @@ namespace DeltaComp
             ImageChannelsListBox.ItemsSource = null;
             ImageOriginalSizeLabel.Text = Constants.DefaultSizeString;
             ImageSourceSizeLabel.Text = Constants.DefaultSizeString;
+            ImagePreviewFormatLabel.Text = "";
             _previewBitmap = null;
             _previewPixels = null;
+            _resampledChannels = null;
 
             CompressionContext currentContext = CurrentContext;
             List<Channel> channels = currentContext.Channels;
@@ -518,10 +645,9 @@ namespace DeltaComp
             currentContext.UpdatePreview = ImageUpdatePreview;
             currentContext.PreviewIsUpToDate = false;
 
-            // The preview is always 8-bit BGRA: Grayscale is shown in all color components,
-            // and a missing alpha channel is shown as opaque.
-            _previewBitmap = new WriteableBitmap(_displaySize, new Vector(96, 96), PixelFormats.Bgra8888, AlphaFormat.Unpremul);
-            _previewPixels = new byte[_displaySize.Width * _displaySize.Height * 4];
+            // The preview bitmap is created by ImageUpdatePreview() for the size of the resulting image
+            _previewBitmap = null;
+            _previewPixels = null;
             ImageUpdatePreviewButton.IsEnabled = true;
             ImageUpdatePreview();
         }
@@ -532,14 +658,27 @@ namespace DeltaComp
         {
             CompressionContext currentContext = CurrentContext;
 
-            if ((_image == null) || (_previewBitmap == null) || (_previewPixels == null)) return;
+            if (_image == null) return;
 
-            int stride = _displaySize.Width * 4;
-            PreviewRenderer.RenderBgra32(currentContext.Channels, _image.Width, _image.Height, _previewPixels, stride,
-                _displaySize.Width, _displaySize.Height);
+            // The preview shows the resulting image, downscaled for display if it is large
+            List<Channel> channels = ImageGetResultChannels();
+            PixelSize previewSize = GetDisplaySize(_targetSize.Width, _targetSize.Height);
+            if ((_previewBitmap == null) || (_previewPixels == null) || (_previewBitmap.PixelSize != previewSize))
+            {
+                // The preview is always 8-bit BGRA: Grayscale is shown in all color components,
+                // and a missing alpha channel is shown as opaque.
+                _previewBitmap = new WriteableBitmap(previewSize, new Vector(96, 96), PixelFormats.Bgra8888, AlphaFormat.Unpremul);
+                _previewPixels = new byte[previewSize.Width * previewSize.Height * 4];
+                RenderOptions.SetBitmapInterpolationMode(ImageDestinationViewer, (previewSize.Width < _targetSize.Width) ?
+                    BitmapInterpolationMode.LowQuality : BitmapInterpolationMode.None);
+            }
+
+            int stride = previewSize.Width * 4;
+            PreviewRenderer.RenderBgra32(channels, _targetSize.Width, _targetSize.Height, _previewPixels, stride,
+                previewSize.Width, previewSize.Height);
             using (ILockedFramebuffer framebuffer = _previewBitmap.Lock())
             {
-                for (int y = 0; y < _displaySize.Height; y++)
+                for (int y = 0; y < previewSize.Height; y++)
                 {
                     Marshal.Copy(_previewPixels, y * stride, framebuffer.Address + y * framebuffer.RowBytes, stride);
                 }
@@ -552,9 +691,11 @@ namespace DeltaComp
             // Calculate the data size based on the number of channels and color depth
             int sourceBitsPerPixel = 0;
             foreach (Channel c in currentContext.Channels) sourceBitsPerPixel += c.TargetBitDepth;
-            long size = ((long)sourceBitsPerPixel * _image.Width * _image.Height + 7) >> 3;
+            long size = ((long)sourceBitsPerPixel * _targetSize.Width * _targetSize.Height + 7) >> 3;
             currentContext.SourceSize = size;
             ImageSourceSizeLabel.Text = GetSizeString(size);
+            ImagePreviewFormatLabel.Text = String.Format("{0}x{1}, {2}", _targetSize.Width, _targetSize.Height,
+                GetPixelFormatString(currentContext.Channels));
 
             currentContext.PreviewIsUpToDate = true;
         }
@@ -887,8 +1028,8 @@ namespace DeltaComp
 
             if (currentContext.Source is ImageDataSource imageSource)
             {
-                // Current context is an Image context
-                _compressor = new Compressor(channels, (UInt16)imageSource.Width, (UInt16)imageSource.Height,
+                // Current context is an Image context: the resulting image is compressed (downscaled if a smaller size is entered)
+                _compressor = new Compressor(ImageGetResultChannels(), (UInt16)_targetSize.Width, (UInt16)_targetSize.Height,
                     imageSource.MultithreadedReadingAllowed, WriteCompressedByteDelegate, DispatchUpdateProgressDelegate);
                 SquaringOption? selectedOption = ImageSplitIntoSquaresComboBox.SelectedItem as SquaringOption;
                 if ((selectedOption != null) && (selectedOption.Size > 1))
@@ -1175,6 +1316,7 @@ namespace DeltaComp
             DeltaOptionComboBox.IsEnabled = false;
             SettingsModeComboBox.IsEnabled = false;
             TargetPlatformComboBox.IsEnabled = false;
+            ImageSplitIntoSquaresComboBox.IsEnabled = false;
             CompressButton.IsEnabled = false;
         }
 
@@ -1187,6 +1329,7 @@ namespace DeltaComp
             DeltaOptionComboBox.IsEnabled = true;
             SettingsModeComboBox.IsEnabled = true;
             TargetPlatformComboBox.IsEnabled = true;
+            ImageSplitIntoSquaresComboBox.IsEnabled = (_image != null);
             CompressButton.Content = Constants.CompressButtonCaption;
             CompressButton.IsEnabled = (CurrentContext.Source != null);
         }

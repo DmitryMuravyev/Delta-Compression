@@ -5,6 +5,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Added
+- The image can be downscaled before compression: the width and height of the resulting image are entered under the channels (one follows the other by the aspect ratio, up to the original size). The image is downscaled by area averaging after the grayscale conversion and the alpha choice, with the color weighted by alpha, and the bit depth is reduced after downscaling. The square sizes offered and tried by Auto follow the resulting size.
+- The preview shows the size and pixel format of the resulting image (for example `75x100, RGBA 5-5-5-5, 20 bpp`).
+
+### Changed
+- The squares option moved to the compression settings at the bottom of the window.
+
 ### Fixed
 - The frame-by-frame chain builder of the library (`Compressor.UseOptimalBlockChain = false`; the application always builds the optimal chain) skipped the block starting one frame after each new main block, a bug present since version 1. Its output is now 0.58% smaller on the test set (up to 4.1%); the reference outputs of the benchmark were regenerated.
 - Large images (for example a 30-megapixel photo) made the application pause on every checkbox click and before drop-down lists opened. Images larger than 1024 pixels are now shown downscaled, while compression still uses every pixel.

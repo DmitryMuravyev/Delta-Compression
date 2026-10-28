@@ -64,6 +64,7 @@ Results on the test set compared to version 1 with the settings from the sprints
 - up to 64 bits per frame (decompressor modification is required for a larger frame width);
 - decompression per 1 request: up to 2^32 frames (pixels), up to 2^32 compressed/decompressed data size;
 - decompression of 1-2-4 bits frames;
+- downscaling images (area averaging, the aspect ratio is kept);
 - splitting images into squares;
 - encoding to the desired color bit depth for each channel;
 - conversion to grayscale;
@@ -84,12 +85,13 @@ Results on the test set compared to version 1 with the settings from the sprints
 
 ![Application](/docs/images/screenshot-image.png)
 
-The compression application contains 2 tabs: for images and for any other files. After opening an image or file, you can set up the desired channel configuration, and select the ***Split into squares*** mode for images.
-In the preview area, you can see how the image (or data divided into channels) will look for the selected configuration.  
+The compression application contains 2 tabs: for images and for any other files. After opening an image or file, you can set up the desired channel configuration. An image can also be downscaled: enter the width or the height of the resulting image under the channels, and the other side follows the aspect ratio. The image is downscaled by area averaging after the channel configuration (grayscale conversion, alpha) is applied, and the bit depth is reduced after downscaling.
+In the preview area, you can see how the image (or data divided into channels) will look for the selected configuration, with its size and pixel format.  
 
 Compression settings are configured at the bottom of the window:
 - The number of bits of the block length field. The larger this field, the longer blocks the compression algorithm will be able to make. This parameter is configured individually for each specific data instance and is usually in the range of 5-8 bits.
 - Delta calculation method. A Fixed Window is more suitable for low-contrast noise, and an Adaptive Floating Window is better for gradients (refer to the links above). Combinations of them are also available.
+- Squares (images only): splitting the image into squares with the selected side, which often compresses better. Only the sizes that divide both sides of the resulting image are offered.
 - Settings: ***Manual*** uses the block length field, delta method and squares you selected. ***Auto*** (the default) tries the block length fields, delta methods and square sizes, keeps the combination that gives the smallest file and shows it in the corresponding fields. Since Auto may choose any delta method and square size, check the generated .h-file and configure the decompressor accordingly (see Decompression below).
 - Selection of the platform for which the header .h-file will be generated. The only difference between AVR and other platforms is that the macro symbol "PROGMEM" is added to the AVR array constant and a warning comment is issued every 16384 bytes of the array about exceeding this threshold. For other platforms these actions are not performed (configuration of platforms and code generation features can be customized and are located next to the application: [appsettings.json](/src/DeltaComp.App/appsettings.json), [Header_Source.xml](/src/DeltaComp.App/Header_Source.xml), [Header_Transformation.xslt](/src/DeltaComp.App/Header_Transformation.xslt)).
 
