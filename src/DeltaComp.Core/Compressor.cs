@@ -334,7 +334,9 @@ namespace DeltaComp
             _cancellationToken = token;
             UpdateStatus(CompressionStage.Preparation, 0);
 
-            // Read the source data once (in the linear order)
+            // Read the source data once (in the linear order). All the trials share this one copy: a trial that
+            // splits the image into squares maps its frame numbers to pixels on the fly instead of reordering
+            // the data (see CreateTrial()), so the memory doesn't grow with the number of trials running in parallel.
             bool splitToSquares = SplitToSquares;
             SplitToSquares = false;
             PrepareFrames();
@@ -365,6 +367,8 @@ namespace DeltaComp
             }
             DeltaCalculationOption = trials[best].delta;
             BlockSizeBits = results[best].blockSizeBits;
+
+            // Compress() reads the data again in the order of the chosen settings (it may differ from the linear one)
             _frames = null!;
 
             return (new AutoSettings(BlockSizeBits, DeltaCalculationOption, bestSquare, results[best].bits));
@@ -444,6 +448,8 @@ namespace DeltaComp
 
             trial._methodsCount = new byte[ChannelsCount];
             for (byte c = 0; c < ChannelsCount; c++) trial._methodsCount[c] = trial.GetMethodsCount(c);
+            // A trial only runs FindOptimalChains(), and only CalculateBackward() reads the frames there:
+            // it reads each frame once, so mapping the frame number to the pixel costs little.
             trial._frames = linearFrames;
             trial._framesInLinearOrder = trial.SplitToSquares;
             return (trial);
@@ -789,6 +795,9 @@ namespace DeltaComp
                 {
                     mainBlock = currentBlock;
                     alterBlockChainEfficiency = currentBlock.Efficiency;
+                    // Together with the increment below, the next position checked is StartFrame + 2: a block
+                    // starting at StartFrame + 1 is never considered as an alternative. This is how the original
+                    // algorithm works, and the reference output (tests/baseline.json) depends on it.
                     currentPosition++;
                     lastBlockFinished = false;
                 }
@@ -882,6 +891,13 @@ namespace DeltaComp
             for (UInt32 position = 0; position < TotalFrames; position += bestLength[position])
             {
                 UInt32 length = bestLength[position];
+
+                // The dynamic programming keeps only the length of each block, so the methods are found again
+                // here. CalculateBackward() can't be used: it must be called for every position in the backward
+                // order, while the chain is restored forwards and only the starts of its blocks are needed,
+                // so the lengths are found by a forward scan at these positions.
+                // GetMinCost() resolves ties the same way as GetCostLine() (no compression, Fixed, Adaptive),
+                // but even a different choice of equal cost would give the same size.
                 lengths.Calculate(position);
                 lengths.ResetCursors();
 
@@ -921,7 +937,10 @@ namespace DeltaComp
         {
             if (_frames == null) PrepareFrames();
 
-            // The lengths are found for the longest block size, shorter ones just limit them
+            // The lengths are found for the longest block size, shorter ones just limit them (a block valid for
+            // a long maximum is valid for a shorter one up to that shorter maximum). ChannelMethodLengths reads
+            // the maximum block size from the compressor during the whole pass, so the field is changed for the
+            // time of the pass and restored afterwards (also if the compression is cancelled).
             byte blockSizeBits = _blockSizeBits;
             BlockSizeBits = blockSizeBitsList.Max();
             var lengths = new ChannelMethodLengths(this);
@@ -975,13 +994,18 @@ namespace DeltaComp
             public ChainSearch(Compressor compressor, byte blockSizeBits, UInt32[]? bestLength)
             {
                 _compressor = compressor;
+                // The header of the compressor holds its own block size field: replace it with this one
+                // (the method numbers don't depend on the block size)
                 _headerBits = (UInt64)compressor._headerBits - compressor._blockSizeBits + blockSizeBits;
                 _maxBlockSize = 1u << blockSizeBits;
                 _bestLength = bestLength;
                 _fixedCursor = new byte[compressor.ChannelsCount];
                 _adaptiveCursor = new byte[compressor.ChannelsCount];
 
-                // A block is never longer than _maxBlockSize, so only the next _maxBlockSize results are needed
+                // A block is never longer than _maxBlockSize, so only the next _maxBlockSize results are needed.
+                // The ring size is a power of two (the index is "& _ringMask" instead of "%") and holds at least
+                // _maxBlockSize + 1 results: the ones for position + 1 ~ position + _maxBlockSize, plus position itself.
+                // Best(TotalFrames) = 0: nothing is left after the last frame.
                 _ringMask = Math.Min(BitOperations.RoundUpToPowerOf2((UInt64)_maxBlockSize + 1),
                                      BitOperations.RoundUpToPowerOf2((UInt64)compressor.TotalFrames + 1)) - 1;
                 _best = new UInt64[_ringMask + 1];
@@ -1137,7 +1161,9 @@ namespace DeltaComp
                     byte bitDepth = _compressor.BitsPerChannel[c];
                     UInt32[] frames = _compressor._frames[c];
                     UInt32 currentFrame = frames[_compressor._framesInLinearOrder ? _compressor.GetPixelForSquares(position) : position];
-                    UInt32 nextFrame = state.NextFrame; // the frame at position + 1 (read in the previous step)
+                    // The adaptive check needs the frame at position + 1 too: it was the current frame of the previous
+                    // step, so it's kept instead of being read again (important when frames are mapped to squares)
+                    UInt32 nextFrame = state.NextFrame;
                     state.NextFrame = currentFrame;
 
                     for (byte w = 0; w < bitDepth; w++)
@@ -1224,6 +1250,7 @@ namespace DeltaComp
                         Min[w] = new MonotonicDeque(capacity);
                         Max[w] = new MonotonicDeque(capacity);
                     }
+                    // Before the first step (position = TotalFrames - 1) the blocks are limited only by the end of the data
                     FixedEnd = Enumerable.Repeat(compressor.TotalFrames, bitDepth).ToArray();
                     AdaptiveBreak = Enumerable.Repeat(compressor.TotalFrames, bitDepth).ToArray();
                 }
@@ -1276,6 +1303,8 @@ namespace DeltaComp
                     _front = 0;
                 }
 
+                // Called for every frame that leaves the block at the back. The frame is in the deque only if it is
+                // still the extremum (otherwise it was dropped by PushFront() earlier), and then it is the back element.
                 public void RemoveBackIndex(UInt32 index)
                 {
                     if ((_count > 0) && (_indexes[(_front + _count - 1) % _indexes.Length] == index)) _count--;
@@ -1512,7 +1541,8 @@ namespace DeltaComp
                     if (channelMethods[m].Length > maxLength) channelMethods[m].Length = maxLength;
                     channelMethods[m].Index = m;
 
-                    // Collect distinct lengths as the candidate block lengths
+                    // Collect distinct lengths as the candidate block lengths: the length of a combination of methods
+                    // is the length of its shortest method, so no other length is possible
                     UInt32 length = channelMethods[m].Length;
                     if (!candidates.Slice(0, candidatesCount).Contains(length)) candidates[candidatesCount++] = length;
                 }
@@ -1522,7 +1552,7 @@ namespace DeltaComp
             Span<UInt64> minExactCosts = stackalloc UInt64[ChannelsCount];  // B(c)
             Span<byte> currentMethods = stackalloc byte[ChannelsCount];
             Span<byte> bestMethods = stackalloc byte[ChannelsCount];
-            UInt64 noCost = UInt64.MaxValue;
+            UInt64 noCost = UInt64.MaxValue; // GetMinBitsForLength(): no combination lasts exactly this length
 
             // Pass 1: the maximum efficiency (1 - block bits / raw bits) among all candidate lengths.
             // The frame-by-frame analysis compares blocks of different lengths, so it needs the efficiency, not the size.
@@ -1539,7 +1569,18 @@ namespace DeltaComp
                 if (efficiencies[i] > maxEfficiency) maxEfficiency = efficiencies[i];
             }
 
-            // Pass 2: the lexicographically first combination with the maximum efficiency
+            // Pass 2: the lexicographically first combination with the maximum efficiency.
+            //
+            // The original brute force tried all combinations in the lexicographic order and kept the first one with
+            // the maximum efficiency, whatever its length. For one length, the combinations with the maximum efficiency
+            // are those with the minimum bits, and GetFirstCombinationForLength() gives the first of them; so the
+            // result is the lexicographically smallest of these "first combinations" over all the lengths that reach
+            // the maximum efficiency. The comparison is between the method numbers, not the lengths.
+            //
+            // GetMinBitsForLength() is called again instead of keeping its result from pass 1, because the
+            // reconstruction also needs A(c) and B(c) for this length (minCosts and minExactCosts), and pass 1
+            // overwrites them for every candidate. Keeping them all would take 2 * C values per candidate, while
+            // only the lengths with the maximum efficiency get here (usually one), so recalculating is cheaper.
             bool found = false;
             for (int i = 0; i < candidatesCount; i++)
             {
@@ -1571,7 +1612,8 @@ namespace DeltaComp
 
 
         // The smallest block size (bits) among the combinations of methods with the length of exactly 'length' frames.
-        // Also fills A(c) and B(c) for this length (see GetBestBlockBruteForce).
+        // Also fills A(c) (minCosts) and B(c) (minExactCosts) for this length (see GetBestBlockBruteForce):
+        // GetFirstCombinationForLength() needs them, so they must be filled for the same length before it is called.
         private UInt64 GetMinBitsForLength(UInt32 length, ReadOnlySpan<Method> allMethods, int stride,
             Span<UInt64> minCosts, Span<UInt64> minExactCosts)
         {
@@ -1718,6 +1760,7 @@ namespace DeltaComp
                 // from the minimum of the block to the minimum + 2^W - 1 (the deltas are written relative to the minimum)
                 while ((method < bitDepth) && (range > ((1u << method) - 1)))
                 {
+                    // The block ends before the current frame, so its initial value is the minimum without it
                     lengths[method] = length;
                     initialValues[method] = (length > 0) ? min : 0;
                     method++;
@@ -2023,6 +2066,7 @@ namespace DeltaComp
                             if (windows[c] > 0)
                             {
                                 // Skip first frame because we have already wrote it as initial value
+                                // (this is why an Adaptive block costs (length - 1) * W bits of data)
                                 if (useInitialValue[c])
                                 {
                                     useInitialValue[c] = false;
