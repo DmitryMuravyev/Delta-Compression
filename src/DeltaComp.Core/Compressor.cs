@@ -41,6 +41,9 @@ Sprint 1 - https://www.patreon.com/posts/delta-encoding-1-106850934
 Sprint 2 - https://www.patreon.com/posts/delta-encoding-2-108056837
 Sprint 3 - https://www.patreon.com/posts/delta-encoding-3-108236064
 
+Sprint 4 (the optimal chain of blocks and the automatic settings) is described in
+docs/Sprint_4_Mathematical_foundation.pdf and docs/v2-changes.md in the repository.
+
 */
 
 
@@ -611,11 +614,15 @@ namespace DeltaComp
         // Calculate the size of the header fields in bits
         private void CalculateHeaderBits()
         {
-            // The header of the Method contains only its description w/o any real data
+            // The header of the Method contains only its description w/o any real data:
+            // the block length field plus, for every channel, the number of the method.
+            // The initial values are not counted here, they belong to the cost of each method
+            // (see GetCompressedBitsForMethod()).
 
             _headerBits = _blockSizeBits;
             for (byte c = 0; c < ChannelsCount; c++)
             {
+                // The number of bits needed to write the largest method number (methods count - 1), at least 1
                 BitsPerMethodDeclaration[c] = 0;
                 byte currentChannelMethodsCount = (byte)(GetMethodsCount(c) - 1);
                 do
@@ -629,7 +636,14 @@ namespace DeltaComp
         }
 
 
-        // Get the number of methods depending on the delta calculation options used
+        // Get the number of methods depending on the delta calculation options used.
+        // For a channel of K bits the method number m means (W = window width in bits):
+        //   Fixed Window only:           m = 0 ~ K-1 Fixed W = m,                             m = K no compression;
+        //   Adaptive Floating only:      m = 0 Fixed W = 0, m = 1 ~ K-1 Adaptive W = m,        m = K no compression;
+        //   Both options, Fixed first:   m = 0 ~ K-1 Fixed W = m, m = K no compression, m = K+1 ~ 2K-1 Adaptive W = m - K;
+        //   Both options, Adaptive first: the same, but 1 ~ K-1 are Adaptive and K+1 ~ 2K-1 are Fixed.
+        // W = 0 means that all the frames of the block are equal to the initial value (no data at all).
+        // The Adaptive window of width 0 doesn't exist, it would be the same as the Fixed one.
         private byte GetMethodsCount(byte channel)
         {
             if ((DeltaCalculationOption == DeltaOption.FixedWindowFirst) || 
@@ -721,6 +735,13 @@ namespace DeltaComp
         // Build blocks for a frames range using serial efficiency analysis.
         // This one is a little bit complicated, so I'm referring you once again
         // to the links at the top of file.
+        //
+        // In short: the main block is the most efficient block starting at the current position. While we walk
+        // through it, a more efficient block may start inside it; then we try the alternative chain
+        // "head of the main block + that block (+ the tail of the main block)" and remember the head of the
+        // most efficient alternative. When the main block ends, it is either taken as it is, or (if an
+        // alternative was better) the range of the head is rebuilt recursively and the walk continues from
+        // the end of the head.
         private List<Block> SmartBuildBlocks(UInt32 startFrame, UInt32 boundary)
         {
             var mainBlockChain = new List<Block>();
@@ -763,6 +784,7 @@ namespace DeltaComp
                 }
 
 
+                // A new main block starts here (the efficiency to beat is its own)
                 if (lastBlockFinished)
                 {
                     mainBlock = currentBlock;
@@ -812,6 +834,7 @@ namespace DeltaComp
 
                 currentPosition++;
 
+                // The main block is over: take it or rebuild the head of the best alternative
                 if (currentPosition >= mainBlock.StartFrame + mainBlock.Length)
                 {
                     if (alterBlockFound)
@@ -973,6 +996,7 @@ namespace DeltaComp
                 UInt32 maxLength = (UInt32)Math.Min((UInt64)_maxBlockSize, (UInt64)_compressor.TotalFrames - position);
                 UInt64 bestBits = UInt64.MaxValue;
                 UInt32 bestBlockLength = 0;
+                // The narrowest windows to start from: Fixed 0, Adaptive 1 (see GetMethodsCount())
                 Array.Clear(_fixedCursor);
                 Array.Fill(_adaptiveCursor, (byte)1);
 
@@ -995,6 +1019,7 @@ namespace DeltaComp
 
                     while (l <= segmentEnd)
                     {
+                        // The block alone is already not smaller than the best total, and it only grows with l
                         UInt64 bits = a + slope * l;
                         if (bits >= bestBits) { done = true; break; }
 
@@ -1025,6 +1050,7 @@ namespace DeltaComp
                             {
                                 if (bits >= bestBits) { done = true; break; }
 
+                                // Strictly smaller: of the equal totals the shortest first block is kept
                                 UInt64 total = bits + best[index & ringMask];
                                 if (total < bestBits)
                                 {
@@ -1122,6 +1148,9 @@ namespace DeltaComp
                         min.PushFront(position, currentFrame, true);
                         max.PushFront(position, currentFrame, false);
 
+                        // Shrink the block [position, end) from the back until it is not longer than the maximum
+                        // block size and its range (max - min) fits into the window. The deques always hold the
+                        // minimum and the maximum of the current block at their back.
                         UInt32 end = state.FixedEnd[w];
                         UInt32 maxDelta = (w < 32) ? ((1u << w) - 1) : UInt32.MaxValue;
                         UInt64 maxEnd = Math.Min((UInt64)position + maxBlockSize, totalFrames);
@@ -1157,6 +1186,8 @@ namespace DeltaComp
                             {
                                 windowStart = 0;
                             }
+                            // If the next frame doesn't fit, a block starting here can't go beyond this frame;
+                            // otherwise it lasts as long as the block starting at the next frame (+1)
                             if (!((nextFrame >= windowStart) && ((nextFrame - windowStart) < windowWidth)))
                                 state.AdaptiveBreak[w] = position + 1;
                         }
@@ -1217,6 +1248,7 @@ namespace DeltaComp
                 public void PushFront(UInt32 index, UInt32 value, bool isMin)
                 {
                     // Drop the front elements that can never be the extremum while the new one is in the window
+                    // (they leave the window before the new one, since the window shrinks from the back)
                     while (_count > 0)
                     {
                         UInt32 frontValue = _values[_front];
@@ -1269,6 +1301,9 @@ namespace DeltaComp
 
             // The cheapest method of the channel that lasts at least 'length' frames.
             // Must be called with non-decreasing lengths after ResetCursors().
+            // A narrower window is cheaper but never lasts longer, so as the length grows the narrowest window
+            // that still lasts long enough only gets wider: the cursors remember it and only move forward.
+            // In case of a tie no compression wins over Fixed, and Fixed over Adaptive.
             public UInt64 GetMinCost(byte channel, UInt32 length, out byte method)
             {
                 byte bitDepth = _compressor.BitsPerChannel[channel];
@@ -1311,6 +1346,8 @@ namespace DeltaComp
                 sbyte[] fixedIndex = _fixedMethodIndex[channel], adaptiveIndex = _adaptiveMethodIndex[channel];
 
                 // Candidates: the narrowest Fixed and Adaptive windows that last long enough, and no compression.
+                // (A wider window of the same kind would cost more at this length, so it isn't needed until
+                // the narrower one ends.)
                 // Lines: Fixed k + w * l, Adaptive (k - w) + w * l, no compression k * l.
                 Span<UInt64> lineA = stackalloc UInt64[3];
                 Span<UInt64> lineSlope = stackalloc UInt64[3];
@@ -1360,6 +1397,7 @@ namespace DeltaComp
                         if (crossing - 1 < end) end = (UInt32)(crossing - 1);
                     }
                 }
+                // The current line is the cheapest at 'length' itself, so the segment is never empty
                 if (end < length) end = length;
             }
 
@@ -1465,6 +1503,7 @@ namespace DeltaComp
                     }
                     else
                     {
+                        // No compression lasts as long as needed
                         channelMethods[m].Length = _maxBlockSize;
                         channelMethods[m].InitialValue = 0;
                     }
@@ -1485,7 +1524,8 @@ namespace DeltaComp
             Span<byte> bestMethods = stackalloc byte[ChannelsCount];
             UInt64 noCost = UInt64.MaxValue;
 
-            // Pass 1: the maximum efficiency among all candidate lengths
+            // Pass 1: the maximum efficiency (1 - block bits / raw bits) among all candidate lengths.
+            // The frame-by-frame analysis compares blocks of different lengths, so it needs the efficiency, not the size.
             Span<double> efficiencies = (allMethodsCount <= Constants.MaxStackallocMethods) ?
                 stackalloc double[candidatesCount] : new double[candidatesCount];
             double maxEfficiency = double.MinValue;
@@ -1536,6 +1576,11 @@ namespace DeltaComp
             Span<UInt64> minCosts, Span<UInt64> minExactCosts)
         {
             UInt64 bits = _headerBits;
+
+            // Taking A(c) for every channel gives the cheapest block that lasts AT LEAST 'length' frames.
+            // To make it last EXACTLY 'length' frames, at least one channel has to switch to B(c), so the
+            // cheapest way is to switch the channel where this costs the least extra: minDelta = min(B(c) - A(c)).
+            // If no channel has a method that ends exactly at 'length', there is no such block at all.
             UInt64 minDelta = UInt64.MaxValue;
 
             for (byte c = 0; c < ChannelsCount; c++)
@@ -1546,7 +1591,7 @@ namespace DeltaComp
 
                 for (byte m = 0; m < channelMethods.Length; m++)
                 {
-                    if (channelMethods[m].Length < length) continue;
+                    if (channelMethods[m].Length < length) continue; // the method doesn't last long enough
                     UInt64 cost = GetCompressedBitsForMethod(length, m, BitsPerChannel[c]);
                     if (cost < minCost) minCost = cost;
                     if ((channelMethods[m].Length == length) && (cost < minExactCost)) minExactCost = cost;
@@ -1567,6 +1612,11 @@ namespace DeltaComp
         // Reconstruct the lexicographically first combination of methods with the length
         // of exactly 'length' frames and the size of 'bits' (which is the minimum for this length).
         // Uses A(c) and B(c) calculated by GetMinBitsForLength() for the same length.
+        //
+        // The channels are fixed one by one: for each channel we take the smallest method number that can still
+        // be completed (by the remaining channels) to a block of exactly 'bits' bits. Since 'bits' is the minimum,
+        // a choice is good exactly when the cheapest completion reaches 'bits'; the cheapest completion is A(cc)
+        // for every remaining channel, plus the cheapest switch to B(cc) if no channel chosen so far ends at 'length'.
         private void GetFirstCombinationForLength(UInt32 length, UInt64 bits, ReadOnlySpan<Method> allMethods, int stride,
             ReadOnlySpan<UInt64> minCosts, ReadOnlySpan<UInt64> minExactCosts, Span<byte> methods)
         {
@@ -1575,7 +1625,8 @@ namespace DeltaComp
 
             for (byte c = 0; c < ChannelsCount; c++)
             {
-                // The minimum the remaining channels can add, with and without the "exact length" requirement
+                // The minimum the remaining channels can add (restBits), and the extra cost (restMinDelta)
+                // if one of them still has to provide the "exact length" (as minDelta in GetMinBitsForLength())
                 UInt64 restBits = 0;
                 UInt64 restMinDelta = UInt64.MaxValue;
                 for (int cc = c + 1; cc < ChannelsCount; cc++)
@@ -1592,6 +1643,7 @@ namespace DeltaComp
 
                     UInt64 cost = GetCompressedBitsForMethod(length, m, BitsPerChannel[c]);
                     bool reached = lengthReached || (channelMethods[m].Length == length);
+                    // Nobody else can end the block exactly at 'length', so this method can't be used here
                     if (!reached && (restMinDelta == UInt64.MaxValue)) continue;
 
                     UInt64 total = prefixBits + cost + restBits + (reached ? 0 : restMinDelta);
@@ -1662,7 +1714,8 @@ namespace DeltaComp
                 UInt32 newMax = (currentFrame > max) ? currentFrame : max;
                 UInt32 range = newMax - newMin;
 
-                // All the windows that the new frame doesn't fit into end here
+                // All the windows that the new frame doesn't fit into end here: the window W holds the values
+                // from the minimum of the block to the minimum + 2^W - 1 (the deltas are written relative to the minimum)
                 while ((method < bitDepth) && (range > ((1u << method) - 1)))
                 {
                     lengths[method] = length;
@@ -1704,7 +1757,10 @@ namespace DeltaComp
             {
                 UInt32 currentFrame = frames[(int)(position + length)];
 
-                // All the windows that the new frame doesn't fit into end here
+                // All the windows that the new frame doesn't fit into end here. The Adaptive window of 2^W values
+                // is centered on the previous frame and moved back inside the range of the channel (0 ~ 2^K - 1)
+                // if it sticks out; the frame is written as its offset from the start of the window.
+                // The decoder repeats the same calculation, so the window is never stored.
                 while (method < bitDepth)
                 {
                     UInt32 windowWidth = 1u << method;
@@ -1785,7 +1841,10 @@ namespace DeltaComp
         ////////////////////////////////////////////////////////////////////////////////////////////////////
         // Efficiency calculations
 
-        // Get the compressed data bits amount after compression via specified method
+        // Get the compressed data bits amount after compression via specified method:
+        //   no compression     - length * K bits (K = bits per channel);
+        //   Fixed window W     - K bits of the initial value (the minimum of the block) + length * W bits of deltas;
+        //   Adaptive window W  - K bits of the initial value (the first frame itself) + (length - 1) * W bits.
         private UInt64 GetCompressedBitsForMethod(UInt32 length, byte method, byte bitDepth)
         {
             UInt64 methodBits = 0;
@@ -1872,7 +1931,7 @@ namespace DeltaComp
             // Depending on the microcontroller firmware compiler optimization parameters,
             // this option may be more CPU-efficient.
             // You can use this block instead of the next one by
-            // defining PLACE_INITIAL_VALUES_AFTER_METHODS_DECLARATIONS symbol.
+            // defining SEQUENTIAL_METHODS_AND_INITIAL_VALUES_DECLARATION symbol (see the top of the file).
 
 #if SEQUENTIAL_METHODS_AND_INITIAL_VALUES_DECLARATION
             //--------------------------------------------------------------------------------------------------
@@ -1945,7 +2004,8 @@ namespace DeltaComp
                 // Iterate through the channels
                 for (byte c = 0; c < ChannelsCount; c++)
                 {
-                    // If we have to write some data (not the 0th method)
+                    // If we have to write some data (not the 0th method: the window of width 0 means that all
+                    // the frames are equal to the initial value, so there is nothing to write)
                     if (methods[c] > 0)
                     {
                         UInt32 currentFrame = GetFrameForChannel(position, c);
@@ -2000,6 +2060,8 @@ namespace DeltaComp
 
         // Convert linear frame number to pixel within the square
         // (See the 3rd sprint)
+        // The squares go left to right, then top to bottom, and the pixels inside a square go row by row,
+        // so frame number = square number * square size + row * square width + column.
         private UInt32 GetPixelForSquares(UInt32 frameNumber)
         {
             UInt32 currentSquareNumber = (UInt32)(frameNumber / _squareSize);
@@ -2056,7 +2118,8 @@ namespace DeltaComp
         }
 
 
-        // Write compressed data
+        // Write compressed data: the bits are packed most significant bit first, and every complete byte is
+        // passed on at once (the bits that don't fill a byte yet stay in the buffer)
         private void AddBitsToCompressedData(UInt128 bits, byte count)
         {
             _bitsBuffer <<= count;
