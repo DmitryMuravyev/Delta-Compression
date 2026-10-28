@@ -6,7 +6,7 @@ The changes come in five layers:
 
 1. **Speed refactor.** Same output byte for byte, 3.3× faster, memory allocated per run down from tens of GB to tens of MB.
 2. **All window lengths in one scan.** The length of every window width is found in a single pass over the data.
-3. **Exact block search.** The best common block is found by a formula instead of trying every method combination. Same output; Logo RGB888 went from 17.5 s to 0.19 s, so the Fast search mode was no longer needed.
+3. **Exact block search.** The best common block of the frame-by-frame (version 1) chain builder is found by a formula instead of trying every method combination. Same output; Logo RGB888 went from 17.5 s to 0.19 s, so the Fast search mode was no longer needed. The application doesn't use this builder any more (layer 4 replaced it), so this layer only keeps the old mode in the library fast.
 4. **Optimal chain of blocks.** The chain is chosen to minimize the total file size, not each block's efficiency. This is provably the smallest file the decoder can read for the chosen settings, and it is 0–5% smaller than in version 1.
 5. **Auto settings.** The block size field, Δ option and square size are searched per image, giving up to 24% smaller files.
 
@@ -57,7 +57,9 @@ For the same *y*, the window of width 2^(w+1) contains the window of width 2^w, 
 
 ## 3. Exact best-block search
 
-The best common block is now computed by a formula in O((ΣM)²) steps instead of trying all ∏M method combinations, with the same result.
+This layer speeds up the frame-by-frame chain builder of version 1, which the library keeps (`Compressor.UseOptimalBlockChain = false`). The application always builds the optimal chain (section 4), and there the search below isn't needed: the chain search picks the block length itself, so every channel just takes its cheapest method that lasts at least *l* frames (the *A* below), and no channel has to end exactly at *l*.
+
+In the frame-by-frame builder the best common block is now computed by a formula in O((ΣM)²) steps instead of trying all ∏M method combinations, with the same result.
 
 **Before.** For every combination (m₀, …, m_{C−1}) the block length was the shortest of the chosen methods' lengths, and the block with the best efficiency won. RGB888 with two Δ options is 16³ = 4096 combinations per frame.
 

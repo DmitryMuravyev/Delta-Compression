@@ -300,7 +300,7 @@ note_box(ax, 40, 400, 880, 70,
 pages.append(fig)
 
 # ------------------------------------------------------------------------------------------------
-fig, ax = slide("Finding the best common block: exact search")
+fig, ax = slide("Frame-by-frame mode: exact best-block search")
 T(ax, 40, 64, "Sprints 2–3: a block is a combination of methods (m₀, …, m_{C−1}), its length is l = min_c L_{c,m_c}(p),", size=14)
 T(ax, 40, 88, "and the best block has the highest E_block. Brute force tries all ∏ M_c combinations.", size=14)
 T(ax, 40, 126, "Group the combinations by their length. For a candidate length l (one of the lengths L_{c,m}):", size=14)
@@ -320,6 +320,9 @@ rows = [("Frame format", "Brute force, 2 Δ", "Exact, 2 Δ (≤)"),
         ("4ch × 32 bit", "16 777 216", "256² = 65 536")]
 table(ax, 590, 410, rows, [120, 120, 120], rowh=22, size=11)
 T(ax, 40, 420, "Complexity: O(Σ M_c · |candidates|) ≤ O((Σ M_c)²)\ninstead of O(∏ M_c).\nLogo RGB 888: 17.5 s → 0.19 s, same output.", size=14, linespacing=1.5)
+T(ax, 40, 492, "Used only by the library's frame-by-frame builder. The optimal chain\n"
+               "(next slides) chooses l itself: every channel just takes A_c(l), and no\n"
+               "channel has to end exactly at l.", size=12, linespacing=1.4)
 pages.append(fig)
 
 # ------------------------------------------------------------------------------------------------
@@ -465,7 +468,7 @@ pages.append(fig)
 fig, ax = slide("Complexity")
 rows = [("Step", "Before (sprint 3)", "Now"),
         ("Lengths of all methods at p", "O(Σ M_c · 2^b)", "O(Σ k_c) amortized"),
-        ("Best common block at p", "O(∏ M_c)", "O((Σ M_c)²)"),
+        ("Best block at p (frame-by-frame mode)", "O(∏ M_c)", "O((Σ M_c)²)"),
         ("Chain of blocks", "heuristic (frame-by-frame)", "exact DP, pruned"),
         ("Memory allocated, Logo RGB 888", "41 GB (total)", "< 30 MB"),
         ("Compression time, all test cases", "53.7 s", "2.9 s"),

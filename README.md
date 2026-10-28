@@ -28,7 +28,7 @@ Sprint 1 - https://www.patreon.com/posts/delta-encoding-1-106850934
 Sprint 2 - https://www.patreon.com/posts/delta-encoding-2-108056837  
 Sprint 3 - https://www.patreon.com/posts/delta-encoding-3-108236064  
 
-The presentations of all sprints are in the [docs](/docs) folder. Sprint 4 ([PDF](/docs/Sprint_4_Mathematical_foundation.pdf)) gives the mathematical foundation of version 2: an exact best-block search, the provably smallest chain of blocks and the automatic selection of settings. What changed in version 2 and why is described in [docs/v2-changes.md](/docs/v2-changes.md).
+The presentations of all sprints are in the [docs](/docs) folder. Sprint 4 ([PDF](/docs/Sprint_4_Mathematical_foundation.pdf)) gives the mathematical foundation of version 2: the provably smallest chain of blocks, the automatic selection of settings and an exact best-block search for the frame-by-frame mode. What changed in version 2 and why is described in [docs/v2-changes.md](/docs/v2-changes.md).
 
 <h2>The compression algorithm (version 2)</h2>
 
@@ -50,9 +50,9 @@ To keep this fast, the scan over *l* stops as soon as Bits(p, l) alone reaches t
 
 **2. All window widths in one scan.** A wider window always lasts at least as long as a narrower one, so a single pass over the data gives the lengths of all window widths (*w* = 0, 1, 2, …) instead of one pass per width.
 
-**3. Exact best-block search.** The frame-by-frame mode no longer tries every combination of methods (4096 per frame for RGB888). A block length can only be one of the methods' own lengths; for each such length *l* every channel takes its cheapest method that lasts at least *l* frames, and one channel takes the cheapest method that ends exactly at *l*. This gives the same block as the brute force, byte for byte, about 90× faster, so the old "faster" search option was removed.
+**3. Auto settings.** Because the optimal chain gives the exact file size without writing it, the application can try settings: every combination of square size and delta option, and for each the block length field (*b*) from small to large until the size grows three times in a row. The smallest result wins.
 
-**4. Auto settings.** Because the optimal chain gives the exact file size without writing it, the application can try settings: every combination of square size and delta option, and for each the block length field (*b*) from small to large until the size grows three times in a row. The smallest result wins.
+**4. Faster frame-by-frame mode (library only).** This one doesn't change the files the application makes: the application always builds the optimal chain (point 1), where each channel simply takes its cheapest method that lasts at least *l* frames. The library still has version 1's frame-by-frame builder (`Compressor.UseOptimalBlockChain = false`). There a block's length is the shortest of its methods, so the most efficient block of length *l* also needs one channel whose method ends exactly at *l*. Instead of trying every combination of methods (4096 per frame for RGB888), the search goes over the candidate lengths (the methods' own lengths): for each *l*, one channel takes its cheapest method that ends exactly at *l* and the others take their cheapest method that lasts at least *l*. This gives version 1's block byte for byte, about 90× faster, so the old "faster" search option was removed.
 
 Results on the test set compared to version 1 with the settings from the sprints: the optimal chain alone gives files 0–5% smaller, Auto settings up to 24% smaller (for example, Icons RGB888 29382 → 22203 bytes, Logo RGB888 26734 → 22903 bytes), and the whole test set compresses in 2.9 s instead of 53.7 s. Every result is checked by decoding it with the unmodified decoder. The details, proofs and the full table are in [docs/v2-changes.md](/docs/v2-changes.md) and the [Sprint 4 deck](/docs/Sprint_4_Mathematical_foundation.pdf).
 

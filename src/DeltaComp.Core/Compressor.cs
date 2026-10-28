@@ -702,6 +702,7 @@ namespace DeltaComp
         ////////////////////////////////////////////////////////////////////////////////////////////////////
         // Operations with methods and blocks
 
+        // LEGACY: used only by the frame-by-frame builder (UseOptimalBlockChain = false); the application doesn't use it.
         // Run a multithreaded search for the most effective blocks
         // One worker per processor takes the next unprocessed position in turn, so the blocks
         // are ready roughly in order and the chain building (which runs in parallel) rarely waits.
@@ -738,6 +739,7 @@ namespace DeltaComp
         }
 
 
+        // LEGACY: the frame-by-frame builder of version 1 (UseOptimalBlockChain = false); the application doesn't use it.
         // Build blocks for a frames range using serial efficiency analysis.
         // This one is a little bit complicated, so I'm referring you once again
         // to the links at the top of file.
@@ -1440,6 +1442,7 @@ namespace DeltaComp
         }
 
 
+        // LEGACY: used only by the frame-by-frame builder (UseOptimalBlockChain = false); the application doesn't use it.
         // This one is used for multithreaded search of the best blocks for each frame.
         private void FindBestBlock(UInt32 position)
         {
@@ -1449,14 +1452,19 @@ namespace DeltaComp
         }
 
 
+        // LEGACY: used only by the frame-by-frame builder (UseOptimalBlockChain = false); the application doesn't use it.
         // Search for the best block (the former "Fast" search is gone: the exact search is now as quick)
         private Block GetBestBlock(UInt32 position, UInt32 boundary)
         {
-            return (GetBestBlockBruteForce(position, boundary));
+            return (GetMostEfficientBlock(position, boundary));
         }
 
 
-        // Exact search for the best block (the same result as trying every combination of methods).
+        // LEGACY: used only by the frame-by-frame builder (UseOptimalBlockChain = false); the application doesn't use it.
+        // Exact search for the most efficient block (the same result as trying every combination of methods).
+        // The optimal chain doesn't need it: there the block length is chosen by the chain search, so a block of length L may simply use A(c)
+        // for every channel (see GetCostLine), without the "one channel ends exactly at L" part.
+        //
         //
         // Brute force over all combinations costs M^C (4096 for RGB888), but for a fixed block length L
         // the block size is just the header plus independent per-channel costs. So for every candidate L
@@ -1470,7 +1478,7 @@ namespace DeltaComp
         // To keep the output byte-identical with the original brute force, ties are resolved the same way:
         // the brute force keeps the first combination (in lexicographic order of methods) with the
         // maximum efficiency, so we reconstruct exactly that combination.
-        private Block GetBestBlockBruteForce(UInt32 position, UInt32 boundary)
+        private Block GetMostEfficientBlock(UInt32 position, UInt32 boundary)
         {
             Block bestBlock = new Block();
             bestBlock.StartFrame = position;
@@ -1609,8 +1617,9 @@ namespace DeltaComp
         }
 
 
+        // LEGACY: used only by the frame-by-frame builder (UseOptimalBlockChain = false); the application doesn't use it.
         // The smallest block size (bits) among the combinations of methods with the length of exactly 'length' frames.
-        // Also fills A(c) (minCosts) and B(c) (minExactCosts) for this length (see GetBestBlockBruteForce):
+        // Also fills A(c) (minCosts) and B(c) (minExactCosts) for this length (see GetMostEfficientBlock):
         // GetFirstCombinationForLength() needs them, so they must be filled for the same length before it is called.
         private UInt64 GetMinBitsForLength(UInt32 length, ReadOnlySpan<Method> allMethods, int stride,
             Span<UInt64> minCosts, Span<UInt64> minExactCosts)
@@ -1649,6 +1658,7 @@ namespace DeltaComp
         }
 
 
+        // LEGACY: used only by the frame-by-frame builder (UseOptimalBlockChain = false); the application doesn't use it.
         // Reconstruct the lexicographically first combination of methods with the length
         // of exactly 'length' frames and the size of 'bits' (which is the minimum for this length).
         // Uses A(c) and B(c) calculated by GetMinBitsForLength() for the same length.
@@ -1699,6 +1709,8 @@ namespace DeltaComp
         }
 
 
+        // LEGACY: not called any more; GetMaxBlockLengths() does the same for all widths in one scan.
+        // Kept as the simple reference implementation (the version 1 code).
         // Get maximum Fixed Window block length
         // (I gave a detailed description in the 1st sprint,
         // see the link at the beginning of the file)
@@ -1834,6 +1846,8 @@ namespace DeltaComp
         }
 
 
+        // LEGACY: not called any more; GetMaxBlockLengths3() does the same for all widths in one scan.
+        // Kept as the simple reference implementation (the version 1 code).
         // Get maximum Adaptive Floating Window block length
         // (I gave a detailed description in the 1st sprint,
         // see the link at the beginning of the file)
@@ -1923,6 +1937,7 @@ namespace DeltaComp
         }
 
 
+        // LEGACY: used only by the frame-by-frame builder (UseOptimalBlockChain = false); the application doesn't use it.
         // Get the chain of blocks overall efficiency
         private double GetChainEfficiency(List<Block> chain)
         {
