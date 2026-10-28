@@ -16,7 +16,9 @@ compressor from `DeltaComp.Core` and checks three things for every case:
 2. **Byte-exact output**: the SHA-256 of the compressed stream is compared with
    `baseline.json`, which was produced by a frozen copy of the original compressor
    (`DeltaComp.Bench/Reference/ReferenceCompressor.cs`). Optimizations that must not
-   change the output are checked against it.
+   change the output are checked against it. The frozen copy has one deliberate change,
+   made in both compressors: the frame-by-frame builder no longer skips the block that
+   starts one frame after a new main block (outputs 0.58% smaller on the test set).
 3. **Round trip** (optional): the stream is decoded by the unmodified microcontroller
    decoder from `/Decompression`, compiled for the PC, and every frame is compared with
    the source data.

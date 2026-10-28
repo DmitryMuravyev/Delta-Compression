@@ -586,7 +586,8 @@ namespace DeltaComp.Bench.Reference
                 {
                     mainBlock = currentBlock;
                     alterBlockChainEfficiency = currentBlock.Efficiency;
-                    currentPosition++;
+                    // Fixed in version 2: the position was also incremented here, so the block starting
+                    // at StartFrame + 1 was never checked (the same fix as in the current compressor)
                     lastBlockFinished = false;
                 }
                 else

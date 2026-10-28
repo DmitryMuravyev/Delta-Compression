@@ -1,27 +1,27 @@
 {
   "gradient-565-2x2": {
-    "Bytes": 17468,
-    "Sha256": "e35fab547d5b6bf5386101b8df9762e0d3f1dda56613183340acc7c4e936742f",
+    "Bytes": 17466,
+    "Sha256": "8945b656e459e6f9ee19bcd1fd6ee40b8c9ea2dd7cb789c69f44e298141cb436",
     "Efficiency": 84.84
   },
   "gradient-gray": {
-    "Bytes": 16282,
-    "Sha256": "3be9533f33184244b9232eca3da226c469ad1f55494360cc5261b059cca3762b",
-    "Efficiency": 71.73
+    "Bytes": 16272,
+    "Sha256": "19d980997dd2c5dc71f9e3332e6e834262b91e4e0a59c9d2d76c37b589ed9d8b",
+    "Efficiency": 71.75
   },
   "icons-888": {
-    "Bytes": 29382,
-    "Sha256": "b513e6282aa26849bb8d5ab203d49a96fa1a459826b0b9ffe8070ece2cb6b965",
-    "Efficiency": 83
+    "Bytes": 28177,
+    "Sha256": "7fb8e491ceda2bc47d25439e9bd176f572b6a3ccb12c09390936f174743cde79",
+    "Efficiency": 83.69
   },
   "logo-565-2x2": {
     "Bytes": 15546,
-    "Sha256": "21bc54002d1eee20d19559604b6c47cb1012002f732e0eb28b052f4b0996e66d",
+    "Sha256": "dc83b66ee8e005fdc6ca0ae252595cdddb8eff3685f60f2f0dde966730bff8a0",
     "Efficiency": 86.51
   },
   "logo-565-afw-only": {
-    "Bytes": 15183,
-    "Sha256": "471d2f4424e16f4ceb767d5b5fbd65a08200d5ba3e43c8a71865af8f21fff38c",
+    "Bytes": 15180,
+    "Sha256": "76ab0404521bb150878876b4d25954bac6c5afafa71928b774ee6b34c21f113d",
     "Efficiency": 86.82
   },
   "logo-565-fw-only": {
@@ -30,53 +30,53 @@
     "Efficiency": 87.03
   },
   "logo-888": {
-    "Bytes": 26734,
-    "Sha256": "9c4d25bb18c529c19cedf8a1b9293e46647983538cf27e24226a366ac2070bf0",
-    "Efficiency": 84.53
+    "Bytes": 26333,
+    "Sha256": "d0e1cf0b1d3cfe9bb7f2914ec3e001e9e2ef4143926c8db4f3aed4331585443a",
+    "Efficiency": 84.76
   },
   "logo-gray": {
-    "Bytes": 12678,
-    "Sha256": "43123a3801a857a7046ad28f9b943b7c055b46f5773119095ff4d3c027e6ecbe",
-    "Efficiency": 77.99
+    "Bytes": 12472,
+    "Sha256": "20d2181da2128e0527c34cb8cb23ac4f155b5e0d5bdcc2a2adcdb4e7217f404b",
+    "Efficiency": 78.35
   },
   "logo-gray-2x2": {
-    "Bytes": 10624,
-    "Sha256": "f8cc77bf8cc0098462c9be2087a8eb174132cde49cd6cb19a1dbd100f3a3dc50",
-    "Efficiency": 81.56
+    "Bytes": 10616,
+    "Sha256": "49928dc5a48b731489d869355faa23c40ca09b45588891423a1dae5f61033461",
+    "Efficiency": 81.57
   },
   "mattress-gray": {
-    "Bytes": 23231,
-    "Sha256": "750724f315cf3d8f6d7a038356a2cc4a49009fa6e853c945d35e2ae6f2cdf5da",
-    "Efficiency": 59.67
+    "Bytes": 22785,
+    "Sha256": "9947640579b430086889851dfc6d4b8e795c682e53d4f55b79e18fc9ab0544c2",
+    "Efficiency": 60.44
   },
   "mit-text": {
-    "Bytes": 28431,
-    "Sha256": "a4ac1ec94cab9a391a176729e4974a2eb22986b15902b3b81ffe8244135fbf35",
+    "Bytes": 28430,
+    "Sha256": "3ac16e26cd59e6cf36cb6a671793a2ae7c8caaa6d37dbcade2bf4714ee2d4f05",
     "Efficiency": 13.24
   },
   "nebula-565-2x2": {
-    "Bytes": 62974,
-    "Sha256": "0f4cf779de73717686edc20b6b9decd17992d0970ab02c906ea90f90e3d04a42",
-    "Efficiency": 45.34
+    "Bytes": 62827,
+    "Sha256": "79cefaebc2186bf32845d9276504402154853ff09d5ec773094ac48eeb001883",
+    "Efficiency": 45.46
   },
   "noise-gray": {
-    "Bytes": 50233,
-    "Sha256": "0c72f1ea2f4599fcdce3415c926290d686f54b9a8506f9a9efe2fd6243f4a8a9",
+    "Bytes": 50232,
+    "Sha256": "4f7388efa2ff54074f9277de435bee8a0c259d8747b669efb143df27674b1cc3",
     "Efficiency": 12.79
   },
   "parrot-565-2x2": {
-    "Bytes": 41318,
-    "Sha256": "c7375e5bf07fbd59261dd6bf30640cf462851f177c12f26ec46e146d8d3cc5af",
-    "Efficiency": 31.14
+    "Bytes": 41299,
+    "Sha256": "0e14baf08211fb43515425a53a308313db3163e0c85405bb6a0768fd095112f7",
+    "Efficiency": 31.17
   },
   "parrot-565-afw-first": {
-    "Bytes": 43097,
-    "Sha256": "7a9e5f7942fd9ab446fb6d0a163acf1e74c8a438c02ea46c9b165d50d0782b40",
-    "Efficiency": 28.17
+    "Bytes": 43056,
+    "Sha256": "f906d2db908d53ca4a853bf96c67e2613ed381d41305e2406b5ff8f1b7f5c812",
+    "Efficiency": 28.24
   },
   "parrot-gray-2x2": {
-    "Bytes": 23391,
-    "Sha256": "a886aa296c5d1d92a061f278c6ef085b1b7ed583fb4f9d0299ac6438fe6f7164",
-    "Efficiency": 22.03
+    "Bytes": 23388,
+    "Sha256": "2561612ff04a1d55227ee962519e2092add2ff8fe95050def387758cb8de2b30",
+    "Efficiency": 22.04
   }
 }

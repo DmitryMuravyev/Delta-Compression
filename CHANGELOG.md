@@ -6,6 +6,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 ## [Unreleased]
 
 ### Fixed
+- The frame-by-frame chain builder of the library (`Compressor.UseOptimalBlockChain = false`; the application always builds the optimal chain) skipped the block starting one frame after each new main block, a bug present since version 1. Its output is now 0.58% smaller on the test set (up to 4.1%); the reference outputs of the benchmark were regenerated.
 - Large images (for example a 30-megapixel photo) made the application pause on every checkbox click and before drop-down lists opened. Images larger than 1024 pixels are now shown downscaled, while compression still uses every pixel.
 - Auto settings needed several gigabytes of memory per processor core on large images: every trial kept its own copy of the image and a table for all frames. The trials now share the image and keep only the last block length of results, so memory no longer grows with the number of cores.
 - Auto settings are about 3 times faster with exactly the same result: the lengths of the methods are found once for several block sizes, "Both options, Adaptive first" is no longer calculated separately (it always has the same size as "Fixed first"), and the search of the optimal chain skips block lengths that can't give a smaller size.

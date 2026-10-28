@@ -795,10 +795,8 @@ namespace DeltaComp
                 {
                     mainBlock = currentBlock;
                     alterBlockChainEfficiency = currentBlock.Efficiency;
-                    // Together with the increment below, the next position checked is StartFrame + 2: a block
-                    // starting at StartFrame + 1 is never considered as an alternative. This is how the original
-                    // algorithm works, and the reference output (tests/baseline.json) depends on it.
-                    currentPosition++;
+                    // (The position moves on below, so the next block checked starts at StartFrame + 1;
+                    // version 1 moved it here too and skipped that block.)
                     lastBlockFinished = false;
                 }
                 else
