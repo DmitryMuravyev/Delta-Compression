@@ -374,36 +374,55 @@ namespace DeltaComp
         {
             var results = new (UInt64 bits, byte blockSizeBits)[trials.Count];
 
+            // "Both options, Adaptive first" has the same methods as "Both options, Fixed first" (only their numbers
+            // differ), so its sizes are the same: it is calculated once if both are tried.
+            static DeltaOption SameSizeAs(DeltaOption delta) =>
+                (delta == DeltaOption.AdaptiveFloatingWindowFirst) ? DeltaOption.FixedWindowFirst : delta;
+            var unique = trials.Select(t => (t.square, delta: SameSizeAs(t.delta))).Distinct().ToList();
+            int[] uniqueIndex = trials.Select(t => unique.IndexOf((t.square, SameSizeAs(t.delta)))).ToArray();
+            var uniqueResults = new (UInt64 bits, byte blockSizeBits)[unique.Count];
+
             try
             {
-                Parallel.For(0, trials.Count, t =>
+                Parallel.For(0, unique.Count, t =>
                 {
-                    var (square, delta) = trials[t];
+                    var (square, delta) = unique[t];
                     Compressor trial = CreateTrial(linearFrames, square, delta, token);
 
+                    // The block size search stops once the size has grown a few times in a row. The next few
+                    // block sizes are calculated together (they share the lengths of the methods), but never more
+                    // than the ones that would be calculated one by one.
                     UInt64 minBits = UInt64.MaxValue;
                     byte minBlockSizeBits = 0;
-                    int growing = 0;
-                    foreach (byte blockSizeBits in bitsOptions)
+                    int growing = 0, next = 0;
+                    while ((next < bitsOptions.Count) && (growing < Constants.AutoSearchGrowingSteps))
                     {
-                        trial.BlockSizeBits = blockSizeBits;
-                        UInt64 bits = trial.FindOptimalChain(null, false);
-                        if (bits < minBits)
+                        int count = Math.Min(Constants.AutoSearchGrowingSteps - growing, bitsOptions.Count - next);
+                        List<byte> round = bitsOptions.GetRange(next, count);
+                        next += count;
+
+                        UInt64[] sizes = trial.FindOptimalChains(round, null, false);
+                        for (int i = 0; i < count; i++)
                         {
-                            minBits = bits;
-                            minBlockSizeBits = blockSizeBits;
-                            growing = 0;
+                            if (sizes[i] < minBits)
+                            {
+                                minBits = sizes[i];
+                                minBlockSizeBits = round[i];
+                                growing = 0;
+                            }
+                            else if (++growing >= Constants.AutoSearchGrowingSteps) break;
                         }
-                        else if (++growing >= Constants.AutoSearchGrowingSteps) break;
                     }
-                    results[t] = (minBits, minBlockSizeBits);
-                    trialDone();
+                    uniqueResults[t] = (minBits, minBlockSizeBits);
+                    for (int i = 0; i < uniqueIndex.Length; i++) if (uniqueIndex[i] == t) trialDone();
                 });
             }
             catch (AggregateException ex) when (ex.InnerExceptions.All(e => e is OperationCanceledException))
             {
                 throw ex.InnerExceptions[0];
             }
+
+            for (int t = 0; t < trials.Count; t++) results[t] = uniqueResults[uniqueIndex[t]];
 
             return (results);
         }
@@ -869,31 +888,93 @@ namespace DeltaComp
         // for every position.
         private UInt64 FindOptimalChain(UInt32[]? bestLength, bool reportProgress)
         {
+            return (FindOptimalChains([ _blockSizeBits ], bestLength, reportProgress)[0]);
+        }
+
+
+        // The same for several block size fields at once: the lengths of the methods are found once per
+        // position and shared by all of them (only the costs of the blocks depend on the block size field).
+        private UInt64[] FindOptimalChains(IReadOnlyList<byte> blockSizeBitsList, UInt32[]? bestLength, bool reportProgress)
+        {
             if (_frames == null) PrepareFrames();
 
-            // A block is never longer than _maxBlockSize, so only the next _maxBlockSize results are needed:
-            // they are kept in a ring buffer instead of an array for all frames.
-            UInt64 ringMask = Math.Min(BitOperations.RoundUpToPowerOf2((UInt64)_maxBlockSize + 1),
-                                       BitOperations.RoundUpToPowerOf2((UInt64)TotalFrames + 1)) - 1;
-            UInt64[] best = new UInt64[ringMask + 1];
-            best[TotalFrames & ringMask] = 0;
+            // The lengths are found for the longest block size, shorter ones just limit them
+            byte blockSizeBits = _blockSizeBits;
+            BlockSizeBits = blockSizeBitsList.Max();
             var lengths = new ChannelMethodLengths(this);
-
-            for (Int64 p = (Int64)TotalFrames - 1; p >= 0; p--)
+            var searches = new ChainSearch[blockSizeBitsList.Count];
+            for (int i = 0; i < searches.Length; i++)
             {
-                if ((p & 0xFFF) == 0)
+                searches[i] = new ChainSearch(this, blockSizeBitsList[i], bestLength);
+            }
+
+            try
+            {
+                for (Int64 p = (Int64)TotalFrames - 1; p >= 0; p--)
                 {
-                    CheckCompressionCanceled();
-                    if (reportProgress) UpdateStatus(CompressionStage.Analysis, (UInt32)(TotalFrames - p));
+                    if ((p & 0xFFF) == 0)
+                    {
+                        CheckCompressionCanceled();
+                        if (reportProgress) UpdateStatus(CompressionStage.Analysis, (UInt32)(TotalFrames - p));
+                    }
+
+                    UInt32 position = (UInt32)p;
+                    lengths.CalculateBackward(position);
+                    foreach (ChainSearch search in searches) search.Step(position, lengths);
                 }
+            }
+            finally
+            {
+                BlockSizeBits = blockSizeBits;
+            }
 
-                UInt32 position = (UInt32)p;
-                lengths.CalculateBackward(position);
+            return (searches.Select(search => search.TotalBits).ToArray());
+        }
 
-                UInt32 maxLength = (UInt32)Math.Min((UInt64)_maxBlockSize, (UInt64)TotalFrames - position);
+
+        // The dynamic programming of the optimal chain for one block size field: Step() must be called
+        // for TotalFrames - 1, TotalFrames - 2, ..., 0 in turn, after the lengths have been found for the position.
+        private sealed class ChainSearch
+        {
+            // Chunks of block lengths that are checked as a whole before the lengths inside them (see Step())
+            private const UInt32 BigChunk = 256, SmallChunk = 8;
+
+            private readonly Compressor _compressor;
+            private readonly UInt64 _headerBits;
+            private readonly UInt32 _maxBlockSize;
+            private readonly UInt64[] _best; // a ring buffer of the minimum size of the rest of the data
+            private readonly UInt64 _ringMask;
+            private readonly UInt32[]? _bestLength;
+            private readonly byte[] _fixedCursor, _adaptiveCursor;
+
+            public UInt64 TotalBits => _best[0];
+
+            public ChainSearch(Compressor compressor, byte blockSizeBits, UInt32[]? bestLength)
+            {
+                _compressor = compressor;
+                _headerBits = (UInt64)compressor._headerBits - compressor._blockSizeBits + blockSizeBits;
+                _maxBlockSize = 1u << blockSizeBits;
+                _bestLength = bestLength;
+                _fixedCursor = new byte[compressor.ChannelsCount];
+                _adaptiveCursor = new byte[compressor.ChannelsCount];
+
+                // A block is never longer than _maxBlockSize, so only the next _maxBlockSize results are needed
+                _ringMask = Math.Min(BitOperations.RoundUpToPowerOf2((UInt64)_maxBlockSize + 1),
+                                     BitOperations.RoundUpToPowerOf2((UInt64)compressor.TotalFrames + 1)) - 1;
+                _best = new UInt64[_ringMask + 1];
+                _best[compressor.TotalFrames & _ringMask] = 0;
+            }
+
+            public void Step(UInt32 position, ChannelMethodLengths lengths)
+            {
+                UInt64[] best = _best;
+                UInt64 ringMask = _ringMask;
+                byte channels = _compressor.ChannelsCount;
+                UInt32 maxLength = (UInt32)Math.Min((UInt64)_maxBlockSize, (UInt64)_compressor.TotalFrames - position);
                 UInt64 bestBits = UInt64.MaxValue;
                 UInt32 bestBlockLength = 0;
-                lengths.ResetCursors();
+                Array.Clear(_fixedCursor);
+                Array.Fill(_adaptiveCursor, (byte)1);
 
                 // Bits(p, l) is piecewise linear in l, so we go segment by segment: within a segment
                 // every channel keeps its cheapest method and Bits(p, l) = a + s * l.
@@ -903,34 +984,63 @@ namespace DeltaComp
                 {
                     UInt64 a = _headerBits, slope = 0;
                     UInt32 segmentEnd = maxLength;
-                    for (byte c = 0; c < ChannelsCount; c++)
+                    for (byte c = 0; c < channels; c++)
                     {
-                        lengths.GetCostLine(c, l, maxLength, out UInt64 channelA, out UInt64 channelSlope, out UInt32 channelEnd);
+                        lengths.GetCostLine(c, l, maxLength, _fixedCursor, _adaptiveCursor,
+                            out UInt64 channelA, out UInt64 channelSlope, out UInt32 channelEnd);
                         a += channelA;
                         slope += channelSlope;
                         if (channelEnd < segmentEnd) segmentEnd = channelEnd;
                     }
 
-                    UInt64 bits = a + slope * l;
-                    UInt64 index = position + l;
-                    for (; l <= segmentEnd; l++, index++, bits += slope)
+                    while (l <= segmentEnd)
                     {
+                        UInt64 bits = a + slope * l;
                         if (bits >= bestBits) { done = true; break; }
 
-                        UInt64 total = bits + best[index & ringMask];
-                        if (total < bestBits)
+                        // The rest of the data is never more expensive when it starts later (dropping the first
+                        // frame of a block never makes the block longer), so the end of a chunk gives the smallest
+                        // possible rest: if even that can't beat the best total, the whole chunk is skipped.
+                        // Large chunks first, then small ones inside a large chunk that can't be skipped.
+                        UInt32 chunkEnd = Math.Min(segmentEnd, l + (BigChunk - 1));
+                        if (bits + best[((UInt64)position + chunkEnd) & ringMask] >= bestBits)
                         {
-                            bestBits = total;
-                            bestBlockLength = l;
+                            l = chunkEnd + 1;
+                            continue;
                         }
+
+                        while (l <= chunkEnd)
+                        {
+                            bits = a + slope * l;
+                            if (bits >= bestBits) { done = true; break; }
+                            UInt32 smallEnd = Math.Min(chunkEnd, l + (SmallChunk - 1));
+                            if (bits + best[((UInt64)position + smallEnd) & ringMask] >= bestBits)
+                            {
+                                l = smallEnd + 1;
+                                continue;
+                            }
+
+                            UInt64 index = position + l;
+                            for (; l <= smallEnd; l++, index++, bits += slope)
+                            {
+                                if (bits >= bestBits) { done = true; break; }
+
+                                UInt64 total = bits + best[index & ringMask];
+                                if (total < bestBits)
+                                {
+                                    bestBits = total;
+                                    bestBlockLength = l;
+                                }
+                            }
+                            if (done) break;
+                        }
+                        if (done) break;
                     }
                 }
 
                 best[position & ringMask] = bestBits;
-                if (bestLength != null) bestLength[position] = bestBlockLength;
+                if (_bestLength != null) _bestLength[position] = bestBlockLength;
             }
-
-            return (best[0]);
         }
 
 
@@ -1193,8 +1303,9 @@ namespace DeltaComp
 
             // The cost of the cheapest method of the channel for the block length 'length' as a line a + slope * length,
             // and the last length ('end') up to which this line stays the cheapest.
-            // Must be called with non-decreasing lengths after ResetCursors().
-            public void GetCostLine(byte channel, UInt32 length, UInt32 maxLength, out UInt64 a, out UInt64 slope, out UInt32 end)
+            // Must be called with non-decreasing lengths after the cursors are reset (see ChainSearch.Step()).
+            public void GetCostLine(byte channel, UInt32 length, UInt32 maxLength, byte[] fixedCursor, byte[] adaptiveCursor,
+                out UInt64 a, out UInt64 slope, out UInt32 end)
             {
                 byte bitDepth = _compressor.BitsPerChannel[channel];
                 sbyte[] fixedIndex = _fixedMethodIndex[channel], adaptiveIndex = _adaptiveMethodIndex[channel];
@@ -1208,17 +1319,17 @@ namespace DeltaComp
 
                 lineA[lines] = 0; lineSlope[lines] = bitDepth; lineEnd[lines] = maxLength; lines++;
 
-                byte w = _fixedCursor[channel];
+                byte w = fixedCursor[channel];
                 while ((w < bitDepth) && ((fixedIndex[w] < 0) || (_fixedLengths[channel][w] < length))) w++;
-                _fixedCursor[channel] = w;
+                fixedCursor[channel] = w;
                 if (w < bitDepth)
                 {
                     lineA[lines] = bitDepth; lineSlope[lines] = w; lineEnd[lines] = Math.Min(_fixedLengths[channel][w], maxLength); lines++;
                 }
 
-                w = _adaptiveCursor[channel];
+                w = adaptiveCursor[channel];
                 while ((w < bitDepth) && ((adaptiveIndex[w] < 0) || (_adaptiveLengths[channel][w] < length))) w++;
-                _adaptiveCursor[channel] = w;
+                adaptiveCursor[channel] = w;
                 if (w < bitDepth)
                 {
                     lineA[lines] = (UInt64)(bitDepth - w); lineSlope[lines] = w; lineEnd[lines] = Math.Min(_adaptiveLengths[channel][w], maxLength); lines++;

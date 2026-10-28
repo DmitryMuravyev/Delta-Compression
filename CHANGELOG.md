@@ -8,6 +8,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 ### Fixed
 - Large images (for example a 30-megapixel photo) made the application pause on every checkbox click and before drop-down lists opened. Images larger than 1024 pixels are now shown downscaled, while compression still uses every pixel.
 - Auto settings needed several gigabytes of memory per processor core on large images: every trial kept its own copy of the image and a table for all frames. The trials now share the image and keep only the last block length of results, so memory no longer grows with the number of cores.
+- Auto settings are about 3 times faster with exactly the same result: the lengths of the methods are found once for several block sizes, "Both options, Adaptive first" is no longer calculated separately (it always has the same size as "Fixed first"), and the search of the optimal chain skips block lengths that can't give a smaller size.
 
 ## [2.0.0] - 2026-10-19
 
