@@ -34,6 +34,9 @@ namespace DeltaComp
             public const int MinDataFileSize = 64;
             public const int MaxDataFileSize = 1073741824;
 
+            // Larger images are shown downscaled to this size (the longer side), which keeps the UI responsive
+            public const int MaxDisplayDimension = 1024;
+
             // Maximum number of frames shown in the data file preview
             public const int MaxPreviewFrames = 4096;
 
@@ -149,6 +152,7 @@ namespace DeltaComp
         private ImageDataSource? _image = null;
         private WriteableBitmap? _previewBitmap = null;
         private byte[]? _previewPixels = null;
+        private PixelSize _displaySize;
 
         // Compression Task cancellation token
         private CancellationTokenSource _compressionCancellationTokenSource = new CancellationTokenSource();
@@ -251,7 +255,8 @@ namespace DeltaComp
                 {
                     _image = image;
                     currentContext.Filename = Path.GetFileName(selectedFile);
-                    displayBitmap = new Bitmap(selectedFile);
+                    _displaySize = GetDisplaySize(image.Width, image.Height);
+                    displayBitmap = LoadDisplayBitmap(selectedFile, image.Width, _displaySize.Width);
                 }
             }
             catch (Exception ex)
@@ -259,7 +264,12 @@ namespace DeltaComp
                 await DisplayMessage(MessageKind.Error, ex.Message, Constants.ErrorWindowCaption);
             }
 
-            // Display source image
+            // Display source image: an original one is shown pixel by pixel, a downscaled one is smoothed
+            // (without mipmaps, which would be rebuilt on every redraw of the window)
+            BitmapInterpolationMode interpolationMode = ((_image != null) && (_displaySize.Width < _image.Width)) ?
+                BitmapInterpolationMode.LowQuality : BitmapInterpolationMode.None;
+            RenderOptions.SetBitmapInterpolationMode(ImageSourceViewer, interpolationMode);
+            RenderOptions.SetBitmapInterpolationMode(ImageDestinationViewer, interpolationMode);
             ImageSourceViewer.Source = displayBitmap;
 
             bool imageAvailable = (_image != null);
@@ -391,6 +401,28 @@ namespace DeltaComp
         }
 
 
+        // Size of the bitmaps shown on screen: the image size, or less for large images
+        private static PixelSize GetDisplaySize(int width, int height)
+        {
+            int longerSide = Math.Max(width, height);
+            if (longerSide <= Constants.MaxDisplayDimension) return new PixelSize(width, height);
+
+            // Rounded down, as the platform decoder does
+            return new PixelSize(Math.Max(1, width * Constants.MaxDisplayDimension / longerSide),
+                                 Math.Max(1, height * Constants.MaxDisplayDimension / longerSide));
+        }
+
+
+        // Load the source image for display, decoding a large one straight to the display size
+        private static Bitmap LoadDisplayBitmap(string filePath, int imageWidth, int displayWidth)
+        {
+            if (displayWidth >= imageWidth) return new Bitmap(filePath);
+
+            using FileStream stream = File.OpenRead(filePath);
+            return Bitmap.DecodeToWidth(stream, displayWidth, BitmapInterpolationMode.HighQuality);
+        }
+
+
         // Update pixel component channels list
         private void ImageUpdateChannels()
         {
@@ -488,9 +520,8 @@ namespace DeltaComp
 
             // The preview is always 8-bit BGRA: Grayscale is shown in all color components,
             // and a missing alpha channel is shown as opaque.
-            _previewBitmap = new WriteableBitmap(new PixelSize(_image.Width, _image.Height), new Vector(96, 96),
-                PixelFormats.Bgra8888, AlphaFormat.Unpremul);
-            _previewPixels = new byte[_image.Width * _image.Height * 4];
+            _previewBitmap = new WriteableBitmap(_displaySize, new Vector(96, 96), PixelFormats.Bgra8888, AlphaFormat.Unpremul);
+            _previewPixels = new byte[_displaySize.Width * _displaySize.Height * 4];
             ImageUpdatePreviewButton.IsEnabled = true;
             ImageUpdatePreview();
         }
@@ -503,11 +534,12 @@ namespace DeltaComp
 
             if ((_image == null) || (_previewBitmap == null) || (_previewPixels == null)) return;
 
-            int stride = _image.Width * 4;
-            PreviewRenderer.RenderBgra32(currentContext.Channels, _image.Width, _image.Height, _previewPixels, stride);
+            int stride = _displaySize.Width * 4;
+            PreviewRenderer.RenderBgra32(currentContext.Channels, _image.Width, _image.Height, _previewPixels, stride,
+                _displaySize.Width, _displaySize.Height);
             using (ILockedFramebuffer framebuffer = _previewBitmap.Lock())
             {
-                for (int y = 0; y < _image.Height; y++)
+                for (int y = 0; y < _displaySize.Height; y++)
                 {
                     Marshal.Copy(_previewPixels, y * stride, framebuffer.Address + y * framebuffer.RowBytes, stride);
                 }

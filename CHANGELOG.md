@@ -3,6 +3,11 @@
 All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project uses [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Fixed
+- Large images (for example a 30-megapixel photo) made the application pause on every checkbox click and before drop-down lists opened. Images larger than 1024 pixels are now shown downscaled, while compression still uses every pixel.
+
 ## [2.0.0] - 2026-10-19
 
 The compressed stream format is unchanged: files produced by version 2 decode with the same [decompression code](Decompression) as before. Details and measurements are in [docs/v2-changes.md](docs/v2-changes.md) and the [Sprint 4 deck](docs/Sprint_4_Mathematical_foundation.pdf).
@@ -32,4 +37,5 @@ The compressed stream format is unchanged: files produced by version 2 decode wi
 
 The original release: WPF compressor for Windows, decompression code for AVR, ESP32 and STM32, and examples. See Sprints 1–3 in [docs](docs).
 
+[Unreleased]: https://github.com/DmitryMuravyev/Delta-Compression/compare/v2.0.0...HEAD
 [2.0.0]: https://github.com/DmitryMuravyev/Delta-Compression/releases/tag/v2.0.0

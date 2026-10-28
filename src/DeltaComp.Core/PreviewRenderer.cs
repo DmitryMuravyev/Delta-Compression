@@ -42,7 +42,21 @@ namespace DeltaComp
         // A Grayscale channel is shown in all three color components; missing alpha is opaque.
         public static void RenderBgra32(IReadOnlyList<Channel> channels, int width, int height, byte[] destination, int stride)
         {
-            if (destination.Length < stride * height) throw new ArgumentException("Destination buffer is too small.", nameof(destination));
+            RenderBgra32(channels, width, height, destination, stride, width, height);
+        }
+
+
+        // The same, but scaled to the destination size (nearest pixel), so a large image can be previewed
+        // without processing every one of its pixels.
+        public static void RenderBgra32(IReadOnlyList<Channel> channels, int width, int height, byte[] destination, int stride,
+            int destinationWidth, int destinationHeight)
+        {
+            if (destination.Length < stride * destinationHeight) throw new ArgumentException("Destination buffer is too small.", nameof(destination));
+            if ((destinationWidth <= 0) || (destinationWidth > width) || (destinationHeight <= 0) || (destinationHeight > height))
+                throw new ArgumentOutOfRangeException(nameof(destinationWidth), "The destination size must not exceed the image size.");
+
+            int[] sourceX = new int[destinationWidth];
+            for (int x = 0; x < destinationWidth; x++) sourceX[x] = (int)(((long)x * 2 + 1) * width / (destinationWidth * 2));
 
             Channel?[] map = new Channel?[5];
             foreach (Channel c in channels)
@@ -55,12 +69,13 @@ namespace DeltaComp
             Channel? blue = map[(int)ChannelType.Blue] ?? map[(int)ChannelType.Grayscale];
             Channel? alpha = map[(int)ChannelType.Alpha];
 
-            Parallel.For(0, height, y =>
+            Parallel.For(0, destinationHeight, y =>
             {
-                int frame = y * width;
+                int row = (int)(((long)y * 2 + 1) * height / (destinationHeight * 2)) * width;
                 int o = y * stride;
-                for (int x = 0; x < width; x++, frame++, o += 4)
+                for (int x = 0; x < destinationWidth; x++, o += 4)
                 {
+                    int frame = row + sourceX[x];
                     byte r = Preview8(red, frame, 0);
                     destination[o] = (blue == red) ? r : Preview8(blue, frame, 0);
                     destination[o + 1] = (green == red) ? r : Preview8(green, frame, 0);

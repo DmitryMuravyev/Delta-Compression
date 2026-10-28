@@ -110,6 +110,33 @@ namespace DeltaComp.Tests
             }
         }
 
+        [AvaloniaFact]
+        public async Task LargeImage_IsDisplayedDownscaled()
+        {
+            // A 3000x2000 image is shown at 1024x682, while the channels keep the full size
+            string file = Path.Combine(Path.GetTempPath(), "deltacomp_" + Guid.NewGuid().ToString("N") + ".png");
+            using (var bitmap = new Avalonia.Media.Imaging.WriteableBitmap(new Avalonia.PixelSize(3000, 2000), new Avalonia.Vector(96, 96),
+                Avalonia.Platform.PixelFormats.Bgra8888, Avalonia.Platform.AlphaFormat.Opaque))
+            {
+                bitmap.Save(file);
+            }
+
+            try
+            {
+                MainWindow window = new MainWindow();
+                window.Show();
+                await window.OpenImageAsync(file);
+
+                Assert.Equal(new Avalonia.PixelSize(1024, 682), ((Avalonia.Media.Imaging.Bitmap)window.ImageSourceViewer.Source!).PixelSize);
+                Assert.Equal(new Avalonia.PixelSize(1024, 682), ((Avalonia.Media.Imaging.Bitmap)window.ImageDestinationViewer.Source!).PixelSize);
+                Assert.Equal("17.17MB", window.ImageOriginalSizeLabel.Text);
+            }
+            finally
+            {
+                File.Delete(file);
+            }
+        }
+
         // Number of 0x.. elements in the exported array
         private static long CountArrayBytes(string header)
         {
