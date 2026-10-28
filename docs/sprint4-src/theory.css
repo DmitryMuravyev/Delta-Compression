@@ -1,0 +1,29 @@
+/* A4 print style for theory.md (see build_theory.js) */
+@page { size: A4; margin: 20mm 18mm 20mm 18mm; }
+html { font-size: 11pt; }
+body {
+  font-family: "Liberation Serif", "Times New Roman", serif;
+  line-height: 1.4; color: #111; max-width: none; margin: 0; padding: 0;
+  hyphens: auto; text-align: justify;
+}
+header#title-block-header { text-align: center; margin-bottom: 2em; }
+h1.title { font-size: 20pt; margin: 0 0 0.3em 0; }
+p.subtitle { font-size: 12pt; font-style: italic; margin: 0 0 0.6em 0; }
+p.author { font-size: 11pt; margin: 0; }
+h1, h2, h3 { font-family: "Liberation Sans", Arial, sans-serif; color: #1f3a5f; text-align: left;
+  break-after: avoid; page-break-after: avoid; }
+h1 { font-size: 15pt; margin: 1.4em 0 0.5em 0; border-bottom: 1px solid #9ab; padding-bottom: 0.15em; }
+h2 { font-size: 12.5pt; margin: 1.2em 0 0.4em 0; }
+h3 { font-size: 11pt; margin: 1em 0 0.3em 0; }
+p, li { orphans: 3; widows: 3; }
+a { color: #1a5fb4; text-decoration: none; }
+code { font-family: "Liberation Mono", monospace; font-size: 0.88em; background: #f2f4f7; padding: 0 0.2em; border-radius: 2px; }
+pre { background: #f2f4f7; padding: 0.6em; font-size: 0.85em; break-inside: avoid; }
+table { display: table; width: auto; max-width: 100%; overflow: visible; border-collapse: collapse; margin: 0.8em auto; font-size: 0.95em; }
+tr { break-inside: avoid; }
+thead { display: table-header-group; }
+th, td { border: 1px solid #b8c2cc; padding: 0.25em 0.6em; text-align: left; vertical-align: top; }
+th { background: #e8eef5; }
+blockquote { margin: 0.8em 0; padding: 0.4em 0.9em; border-left: 3px solid #1f3a5f; background: #f5f7fa; break-inside: avoid; }
+.katex { font-size: 1.08em; }
+.katex-display { margin: 0.6em 0; break-inside: avoid; }

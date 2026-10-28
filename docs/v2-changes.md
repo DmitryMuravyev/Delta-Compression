@@ -12,7 +12,7 @@ The changes come in five layers:
 
 The main reason for the gains: the old algorithm optimized each block locally, and a series of locally best blocks is not the smallest file. The new one minimizes the total directly.
 
-The mathematics behind all of this is in the [Sprint 4 deck](Sprint_4_Mathematical_foundation.pdf).
+The mathematics behind all of this is in the [Sprint 4 deck](Sprint_4_Mathematical_foundation.pdf) and, with full proofs and references to the code, in the [theory document](Sprint_4_Full_Theory.pdf).
 
 ## Project structure
 

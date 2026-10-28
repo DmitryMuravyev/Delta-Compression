@@ -28,7 +28,7 @@ Sprint 1 - https://www.patreon.com/posts/delta-encoding-1-106850934
 Sprint 2 - https://www.patreon.com/posts/delta-encoding-2-108056837  
 Sprint 3 - https://www.patreon.com/posts/delta-encoding-3-108236064  
 
-The presentations of all sprints are in the [docs](/docs) folder. Sprint 4 ([PDF](/docs/Sprint_4_Mathematical_foundation.pdf)) gives the mathematical foundation of version 2: the provably smallest chain of blocks, the automatic selection of settings and an exact best-block search for the frame-by-frame mode. What changed in version 2 and why is described in [docs/v2-changes.md](/docs/v2-changes.md).
+The presentations of all sprints are in the [docs](/docs) folder. Sprint 4 ([PDF](/docs/Sprint_4_Mathematical_foundation.pdf), with a detailed [A4 theory document](/docs/Sprint_4_Full_Theory.pdf)) gives the mathematical foundation of version 2: the provably smallest chain of blocks, the automatic selection of settings and an exact best-block search for the frame-by-frame mode. What changed in version 2 and why is described in [docs/v2-changes.md](/docs/v2-changes.md).
 
 <h2>The compression algorithm (version 2)</h2>
 
