@@ -238,13 +238,26 @@ $$l_\times = \left\lfloor \frac{\alpha_i - \alpha}{\sigma - \sigma_i} \right\rfl
 
 The "+1" and the strict inequality are there because on a tie the current line is kept. The numerator $\alpha_i - \alpha$ is never negative: the current line is the cheapest at the current $l$ and has the larger slope, so the other line must start higher.
 
-**2. A window runs out.** The narrowest Fixed window lasts until $l = L^F_{w^F}(p)$; at the next length it can't encode the block any more, the next wider window (with a steeper line) takes its place and the candidates change. The same holds for the Adaptive window.
+**2. A window runs out.** The narrowest Fixed window lasts until $l = L^F_{w^F}(p)$; at the next length it can't encode the block any more, the next wider window (with a steeper line) takes its place and the candidates change. The same holds for the Adaptive window. This applies to every candidate, the current line included: if the current line's own window runs out, the segment must end there too.
 
 So the current line of the channel holds up to
 
 $$\mathrm{end}_c = \min\Bigl(l_\times - 1 \text{ over the flatter lines},\ \ L^F_{w^F}(p),\ \ L^A_{w^A}(p)\Bigr).$$
 
 *Example* ($k = 8$). Fixed $w = 3$ lasts until 7 (line $8 + 3l$), Adaptive $w = 4$ lasts until 10 (line $4 + 4l$), no compression is $8l$. At $l = 2$ the Adaptive line is the cheapest ($12$ against $14$ and $16$). The Fixed line has the smaller slope, so $l_\times = \lfloor (8-4)/(4-3) \rfloor + 1 = 5$. Indeed, at $l = 4$ the two are equal ($20 = 20$) and at $l = 5$ the Fixed line wins ($23 < 24$). The segment is $l = 2 \ldots \min(4, 7, 10) = 4$.
+
+The segment is not a choice of block length. It is only the range of lengths over which the same line stays the cheapest. The table gives every length; the "cheapest" column is what a comparison of all candidates at every $l$ would give, and the segments give exactly the same costs:
+
+| $l$ | Adaptive $4 + 4l$ | Fixed $8 + 3l$ | none $8l$ | cheapest | segment |
+|---|---|---|---|---|---|
+| 2 | 12 | 14 | 16 | Adaptive, 12 | 1 starts: lines compared, $\mathrm{end} = 4$ |
+| 3 | 16 | 17 | 24 | Adaptive, 16 | 1: $16 = 12 + 4$ |
+| 4 | 20 | 20 | 32 | Adaptive, 20 (tie, current line kept) | 1: $20 = 16 + 4$ |
+| 5 | 24 | 23 | 40 | **Fixed, 23** | 2 starts: lines compared, $\mathrm{end} = 7$ |
+| 6 | 28 | 26 | 48 | Fixed, 26 | 2: $26 = 23 + 3$ |
+| 7 | 32 | 29 | 56 | Fixed, 29 | 2: $29 = 26 + 3$; Fixed $w = 3$ ends |
+
+At $l = 5$ the Fixed line is used. The candidates are compared only where a segment starts; inside a segment the next cost is one addition. Which $l$ becomes the block is decided separately, by the dynamic programming of section 5 (the smallest $\mathrm{Bits}(p,l) + \mathrm{Best}(p+l)$).
 
 ## 6.2 The whole block
 
