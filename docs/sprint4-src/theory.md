@@ -281,6 +281,8 @@ $$\mathrm{Bits}(p, l) \ge T \ \Rightarrow\ \mathrm{Bits}(p, l') + \mathrm{Best}(
 
 So the scan of lengths stops at the first $l$ where the block alone is not smaller than $T$, and nothing better is lost.
 
+Note what $T$ is: not the cost of a chain built so far, but the best cost found so far for **everything from $p$ to the end of the data** (the scan runs backwards, so at $p$ only the tail $p \ldots N-1$ is known). A single block can reach the cost of the whole tail only when that tail is short compared with $2^b$: at the start of the backward scan (the last frames of the file), or in a small file with a large $b$. In the middle of a large file this stop practically never happens; there the lengths are pruned by the chunk skipping of section 7.2, which also counts the tail after the block.
+
 ## 7.2 Lemma 4: Best(p) never grows with p
 
 **Lemma 4.** $\mathrm{Best}(p+1) \le \mathrm{Best}(p)$.
@@ -293,7 +295,7 @@ $$\mathrm{Bits}(p, l) + \mathrm{Best}(p + l_2) \ge T,$$
 
 none of the lengths $l \ldots l_2$ can beat $T$ and all of them are skipped at once. The code checks chunks of 256 lengths first, then chunks of 8 inside a chunk that can't be skipped, and only then single lengths.
 
-In practice a block that is bigger than the best whole tail appears after a few dozen frames, so the scan looks at a small part of the $2^b$ lengths. For example the text file of the test set with $b = 15$ (32 768 possible lengths) takes about one second.
+This check fires all the time: once a block is clearly worse than the optimal encoding of the same frames, a whole chunk of 256 (or 8) lengths is rejected with one comparison. The scan still runs up to $2^b$, but mostly in chunk steps. For example the text file of the test set with $b = 15$ (32 768 possible lengths) takes about one second.
 
 **In the code:** `ChainSearch.Step()` (`BigChunk = 256`, `SmallChunk = 8`).
 
