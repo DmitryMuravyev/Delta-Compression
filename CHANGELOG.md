@@ -5,14 +5,21 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [2.1.0] - 2026-11-04
+
+The compressed stream format is unchanged. The microcontroller decoder has a bug fix, so replace your copy of the [decompression code](Decompression) (or the mod you use) with the new one.
+
 ### Added
 - The image can be downscaled before compression: the width and height of the resulting image are entered under the channels (one follows the other by the aspect ratio, up to the original size). The image is downscaled by area averaging after the grayscale conversion and the alpha choice, with the color weighted by alpha, and the bit depth is reduced after downscaling. The square sizes offered and tried by Auto follow the resulting size.
 - The preview shows the size and pixel format of the resulting image (for example `75x100, RGBA 5-5-5-5, 20 bpp`).
+- [Sprint 4 theory document](docs/Sprint_4_Full_Theory.pdf): the definitions, lemmas and proofs behind version 2 on A4 pages, with references to the code. The [Sprint 4 deck](docs/Sprint_4_Mathematical_foundation.pdf) got a notation slide and math formulas.
 
 ### Changed
 - The squares option moved to the compression settings at the bottom of the window.
 
 ### Fixed
+- Decompression: the adaptive window flags of the current block were kept in memory allocated anew on every `decompressNextFrames()` call, so a block that continued into the next call could decode wrong values (depending on the heap). This affects programs that decode an image in several calls, as the examples do with their line buffers, and goes back to version 1. The flags are now part of the decoder state, and the decoder no longer uses `malloc`. Fixed in `Decompression/`, all mods and all examples.
+- The decoder round-trip test decodes in chunks of 97 frames, so blocks that span two calls are checked.
 - The frame-by-frame chain builder of the library (`Compressor.UseOptimalBlockChain = false`; the application always builds the optimal chain) skipped the block starting one frame after each new main block, a bug present since version 1. Its output is now 0.58% smaller on the test set (up to 4.1%); the reference outputs of the benchmark were regenerated.
 - Large images (for example a 30-megapixel photo) made the application pause on every checkbox click and before drop-down lists opened. Images larger than 1024 pixels are now shown downscaled, while compression still uses every pixel.
 - Auto settings needed several gigabytes of memory per processor core on large images: every trial kept its own copy of the image and a table for all frames. The trials now share the image and keep only the last block length of results, so memory no longer grows with the number of cores.
@@ -47,5 +54,6 @@ The compressed stream format is unchanged: files produced by version 2 decode wi
 
 The original release: WPF compressor for Windows, decompression code for AVR, ESP32 and STM32, and examples. See Sprints 1–3 in [docs](docs).
 
-[Unreleased]: https://github.com/DmitryMuravyev/Delta-Compression/compare/v2.0.0...HEAD
+[Unreleased]: https://github.com/DmitryMuravyev/Delta-Compression/compare/v2.1.0...HEAD
+[2.1.0]: https://github.com/DmitryMuravyev/Delta-Compression/compare/v2.0.0...v2.1.0
 [2.0.0]: https://github.com/DmitryMuravyev/Delta-Compression/releases/tag/v2.0.0

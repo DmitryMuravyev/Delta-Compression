@@ -2,7 +2,7 @@
 
   <!-- Shared properties of all projects in the repository. -->
   <PropertyGroup>
-    <Version>2.0.0</Version>
+    <Version>2.1.0</Version>
     <Authors>Dmitry Muravyev</Authors>
     <Company>Dmitry Muravyev</Company>
     <Product>DeltaComp</Product>
