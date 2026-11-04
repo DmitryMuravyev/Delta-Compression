@@ -17,3 +17,7 @@ tests/Decoder/bin/
 # OS
 .DS_Store
 Thumbs.db
+
+# STM32CubeIDE build output of the examples
+Examples/STM32/*/Debug/
+Examples/STM32/*/Release/

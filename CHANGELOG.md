@@ -25,6 +25,9 @@ The compressed stream format is unchanged. The microcontroller decoder has a bug
 - Auto settings needed several gigabytes of memory per processor core on large images: every trial kept its own copy of the image and a table for all frames. The trials now share the image and keep only the last block length of results, so memory no longer grows with the number of cores.
 - Auto settings are about 3 times faster with exactly the same result: the lengths of the methods are found once for several block sizes, "Both options, Adaptive first" is no longer calculated separately (it always has the same size as "Fixed first"), and the search of the optimal chain skips block lengths that can't give a smaller size.
 
+### Removed
+- The prebuilt `.elf` files of the STM32 examples: they were built with the decoder before the fix above. Build the examples in STM32CubeIDE.
+
 ## [2.0.0] - 2026-10-19
 
 The compressed stream format is unchanged: files produced by version 2 decode with the same [decompression code](Decompression) as before. Details and measurements are in [docs/v2-changes.md](docs/v2-changes.md) and the [Sprint 4 deck](docs/Sprint_4_Mathematical_foundation.pdf).
