@@ -63,7 +63,7 @@ Results on the test set compared to version 1 with the settings from the sprints
 - up to 32 bits per data channel;
 - up to 64 bits per frame (decompressor modification is required for a larger frame width);
 - decompression per 1 request: up to 2^32 frames (pixels), up to 2^32 compressed/decompressed data size;
-- decompression of 1-2-4 bits frames;
+- decompression of 1-2-4 bits frames is possible;
 - downscaling images (area averaging, the aspect ratio is kept);
 - splitting images into squares;
 - encoding to the desired color bit depth for each channel;
