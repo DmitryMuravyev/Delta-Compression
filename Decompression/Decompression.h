@@ -207,6 +207,7 @@ public:
 	uint32_t currentBlockFramesCount;
 	uint8_t currentBlockMethods[DECOMPRESSION_MAX_NUMBER_OF_CHANNELS];
 	uint32_t currentBaseValues[DECOMPRESSION_MAX_NUMBER_OF_CHANNELS];
+	bool afw[DECOMPRESSION_MAX_NUMBER_OF_CHANNELS]; // Adaptive window flags, kept between calls like the rest of the block state
 
 	uint64_t outputBitsBuffer; // For larger frames we need wider variable, but uint64 is all we can afford.
 	uint8_t outputBitsCount;

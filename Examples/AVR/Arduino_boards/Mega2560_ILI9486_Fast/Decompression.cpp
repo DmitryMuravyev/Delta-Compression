@@ -83,7 +83,6 @@ void Decompression::decompressNextFrames(DecompressionContext * dc, uint8_t * co
 #endif
 
 #if !defined(DECOMPRESSION_FIXED_WINDOW_ONLY)
-	bool * afw = (bool *)malloc(dc->numberOfChannels);
 	bool firstFrame = false;
 #endif
 
@@ -275,10 +274,6 @@ void Decompression::decompressNextFrames(DecompressionContext * dc, uint8_t * co
 			currentBlockFramesCount--;
 		}
 	}
-
-#if !defined(DECOMPRESSION_FIXED_WINDOW_ONLY)
-	free(afw);
-#endif
 
 }
 

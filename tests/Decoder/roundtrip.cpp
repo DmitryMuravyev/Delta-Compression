@@ -54,7 +54,14 @@ int main(int argc, char ** argv) {
 	decoder.resetDecompression();
 	decoder.bufferWidth = 0;
 	// A null output buffer makes the decoder hand every frame to frameDecompressed() in stream order.
-	decoder.decompressNextFrames(&dc, data.data(), nullptr, (uint32_t)strtoul(argv[2], nullptr, 10));
+	// Decode in small chunks, as the examples do with their line buffers, so that blocks
+	// spanning two calls are checked too. 97 frames: not a divisor of the usual block or line sizes.
+	const uint32_t chunk = 97;
+	for (uint32_t left = (uint32_t)strtoul(argv[2], nullptr, 10); left > 0; ) {
+		uint32_t frames = (left < chunk) ? left : chunk;
+		decoder.decompressNextFrames(&dc, data.data(), nullptr, frames);
+		left -= frames;
+	}
 
 	fclose(output);
 	return 0;

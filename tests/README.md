@@ -21,7 +21,8 @@ compressor from `DeltaComp.Core` and checks three things for every case:
    starts one frame after a new main block (outputs 0.58% smaller on the test set).
 3. **Round trip** (optional): the stream is decoded by the unmodified microcontroller
    decoder from `/Decompression`, compiled for the PC, and every frame is compared with
-   the source data.
+   the source data. The stream is decoded in chunks of 97 frames, so blocks that span two
+   `decompressNextFrames()` calls are checked too.
 
 ## Running
 

@@ -43,6 +43,7 @@ uint8_t inputBitsCount;
 uint16_t currentBlockFramesCount;
 uint8_t currentBlockMethods[DECOMPRESSION_MAX_NUMBER_OF_CHANNELS];
 uint8_t currentBaseValues[DECOMPRESSION_MAX_NUMBER_OF_CHANNELS];
+static bool afw[DECOMPRESSION_MAX_NUMBER_OF_CHANNELS]; // Adaptive window flags, kept between calls like the rest of the block state
 
 uint16_t outputBitsBuffer;
 uint8_t outputBitsCount;
@@ -115,7 +116,6 @@ void decompressNextFrames(DecompressionContext * dc, uint8_t * compressedData, u
     uint16_t dataOffset = 0;
 
 #if !defined(DECOMPRESSION_FIXED_WINDOW_ONLY)
-	bool * afw = (bool *)malloc(dc->numberOfChannels);
 	bool firstFrame = false;
 #endif
 
@@ -270,10 +270,6 @@ void decompressNextFrames(DecompressionContext * dc, uint8_t * compressedData, u
 			currentBlockFramesCount--;
 		}
 	}
-
-#if !defined(DECOMPRESSION_FIXED_WINDOW_ONLY)
-	free(afw);
-#endif
 
 }
 
